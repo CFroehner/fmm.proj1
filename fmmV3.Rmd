@@ -1,0 +1,153 @@
+---
+title: "fmm.proj1.Froehner"
+author: "Cosima Froehner"
+date: "2022-12-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()
+messungen <- read.csv("messungen.csv")
+```
+
+
+```{r setup, include=TRUE}
+#Definiere freie Parameter
+t.Strich <- seq(from = 0, to = 5, l = 10000)
+gamma <- 1
+sigma.quadrat <- 1
+```
+
+# Aufgabe 1
+Der vorliegende Report beschäftigt sich mit dem Korrigieren des Messfehlers von elektromagnetischen Impulsmessungen und der Rekonstruktion einer glatten Kurve als Näherung für die unverrauschten Messdaten. Dazu verwenden wir die tatsächlich gemessenen Daten y aus der Spalte y im Datensatz "Messungen" als Input. Als Output erhalten wir Näherungswerte mü2.1 für die unverrauschten elektromagnetischen Impuls-Messungen, die sich um nicht mehr als eine vom Anwender / Physiker vorgegebene Fehlerschranke (Toleranz) von den exakten, unverrauschten elektromagnetischen Impulsen unterscheiden (Epsilon). Der Fehler setzt sich zusammen aus den Teilproblemen Sigma2.1, Sigma1.1 und y. Sigma1.1 ist die Varianz der elektromagnetischen Impulse. Sigma2.1 ist die Varianz des Modellfehlers. Je kleiner die Fehlerschranke (Epsilon) angesetzt ist, umso schwieriger wird es, das numerische Problem zu lösen. 
+
+Den Daten wird die Normalverteilung zugrunde gelegt. Es wird davon ausgegangen, dass diese Entscheidung durch Absprachen mit dem Physiker bzw. wissenschaftlich fundierte Theorien begründet ist. 
+
+# Aufgabe 2 - relative Komditionierung der Teilprobleme
+
+vgl. VL 4, F4ff ("Konditionierung mit mehreren Inputs")
+
+Sei (mü2.1, sigma2.1, Sigma1.1, y) ein Problem mit Lösung mü2.1(sigma2.1, sigma1.1, y).
+Wir definieren zunächst Teilprobleme.
+
+s. Blocknotizen
+
+# Aufgabe 3 - Einfluss der Hyperparameter (Best - und Worst Case)
+
+Beispielverläufe s. Worddatei
+
+# Stabiler und effizienter Algorithmus
+
+Die Matrix Sigma1.1 ist symmetrisch. Folglich können wir sie orthogonal diagonalisieren und damit die Berechnung der Inversen vermeiden, da für orthogonale Matrizen gilt: solve(A) = t(A) und die Inverse einer Diagonalmatrix sich einfach ergibt, indem man die Kehrbrüche auf der Diagonalen berechnet.
+
+```{r}
+alg2 <- function(t, s, sigma = 1, gamma = 1){
+  Kernfun <- function(s) {
+    exp(-(s ^ 2) / gamma)
+  }
+  matK <-
+    function(t, s) {
+      Kernfun(abs(
+        matrix(t, nrow = length(t), ncol = length(s)) - matrix(
+          s,
+          nrow = length(t),
+          ncol = length(s),
+          byrow = TRUE
+        )
+      ))
+    }
+  Sigma1.1 <-
+    matK(messungen$t, messungen$t) + sigma.quadrat * diag(length(messungen$t))
+  Sigma2.1 <- t(matK(messungen$t, t.Strich))
+  P <- GramSchmidt(eigen(Sigma1.1)$vectors)  #Orthogonalisierung und Normalisierung mithilfe von matlib Gram Schmidt Algorithmus
+  D.inv <- diag(1/eigen(Sigma1.1)$values) 
+  y <- Sigma2.1 %*% t(P) %*% D.inv %*% P %*% messungen$y
+  y
+}
+```
+
+
+
+
+
+# Aufgabe 6 - Schlechter Algorithmus
+
+```{r}
+# Funktion matK
+# Berechnet die Kernmatrix 
+# Input: 
+  # t: Messzeitpunkte der erhobenen Daten mit default t aus der Tabelle Messungen
+  # s: beliebige Messzeitpunkte
+# Output: Rekonstruktion der unverrauschten Messwerte
+
+Kernfun <- function(s) {
+  exp(-(s ^ 2) / gamma)
+}
+
+matK <-
+  function(t, s) {
+    Kernfun(abs(
+      matrix(t, nrow = length(t), ncol = length(s)) - matrix(
+        s,
+        nrow = length(t),
+        ncol = length(s),
+        byrow = TRUE
+      )
+    ))
+  }
+
+  
+alg1 <- function(t,
+                 s,
+                 gamma = 1,
+                 sigma.quadrat = 1) {
+  Kernfun <- function(s) {
+    exp(-(s ^ 2) / gamma)
+  }
+  matK <-
+    function(t, s) {
+      Kernfun(abs(
+        matrix(t, nrow = length(t), ncol = length(s)) - matrix(
+          s,
+          nrow = length(t),
+          ncol = length(s),
+          byrow = TRUE
+        )
+      ))
+    }
+  Sigma1.1 <-
+    matK(messungen$t, messungen$t) + sigma.quadrat * diag(length(messungen$t))
+  Sigma2.1 <- t(matK(messungen$t, t.Strich))
+  y <- Sigma2.1 %*% solve(Sigma1.1) %*% messungen$y
+  y
+}
+```
+
+Dieser Algorithmus ist schlecht, weil er die Inverse einer Matrix verwendet. Ein Algorithmus, der eine Inverse verwendet, ist im Allgemeinen instabiler als ein Algorithmus ohne Inverse, da die Inverse nicht immer eindeutig ist. Auch wenn es nur eine Inverse gibt, kann der Algorithmus immernoch anfälliger sein, weil die Berechnung einer Inversen i.d.R. numerisch anspruchsvoller ist als die Berechnung anderer Funktionen. Die Verwendung einer Inversen kann daher dazu führen, dass kleine numerische Fehler, die während der Berechnungen auftreten, sich verstärken und zu größeren Fehlern in den endgültigen Ergebnissen führen. Dies kann insbesondere dann ein Problem sein, wenn der Algorithmus mit großen Datenmengen arbeitet oder wenn er mit sehr kleinen Zahlen oder sehr großen Zahlen arbeitet, die schnell an Genauigkeit verlieren können. Insgesamt ist es daher im Allgemeinen ratsam, Algorithmen zu vermeiden, die eine Inverse verwenden, wenn es möglich ist. Im Folgenden werden wir uns deshalb Zerlegungen von Sigma1.1 zunutze machen, um y ohne Inverse zu berechnen.
+
+
+Außerdem zu erwähnen: alg1 verwendet eine hohe Anzahl an Operationen, ist also aufwändiger und hat eine entsprechend längere Laufzeit. Zusätzlich werden mehrere Matrizen zwischengespeichert. Dadurch benötigt alg1 mehr Speicherplatz, was die Laufzeit weiter erhöht.
+
+
+# Visualisierung
+
+```{r}
+#plotten der geglätteten Kurve mü2.1 bzw. y
+plot(t.Strich, y, type = "l", col = "red")
+points(messungen$t, messungen$y)
+```
+
+# Aufgabe 8 - Numerisches Versagen
+
+Der schlechte Algorithmus versagt beispielsweise bei:
+
+- gamma = 0, sigma bel. wegen singulärer Matrix sigma2.1
+- mü = 0.1^10000, gamma = 0.1^10000 > mü2.1 ist konstant 0, obwohl es nur nah an 0 ist
+- t.Strich <- messungen$y, "Error: System is computationally singular: reciprocal condition number = 3.32132e-20 (gleiches für t = t.Strich)
+
+
+
+
+
+
