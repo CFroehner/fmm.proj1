@@ -1,0 +1,364 @@
+---
+title: "fmm.proj1.Froehner"
+author: "Cosima Froehner"
+date: "2022-12-04"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()
+messungen <- read.csv("messungen.csv")
+library("matlib")
+library("pracma")
+library("microbenchmark")
+library("ggplot2")
+```
+
+```{r setup, include=TRUE}
+#Definiere freie Parameter
+t.Strich <- seq(from = 0, to = 5, l = 100)  #alternativ mit sample, samplesize
+gamma <- 1
+sigma.quadrat <- 1
+```
+
+# Aufgabe 1 - Beschreibung des Problems und des verwendeten Modells
+
+Ein Physiker hat ein Experiment durchgeführt, um die Auswirkungen eines
+elektromagnetischen Impulses zu erforschen. Er hatte dabei eine schöne,
+glatte Kurve erwartet. Allerdings erweist sich das Messgerät als ungenau
+und die tatsächlichen Messungen sind stark verrauscht. Der vorliegende
+Report beschäftigt sich deshalb mit dem Korrigieren des Messfehlers und
+der Rekonstruktion einer glatten Kurve als Näherung für die
+unverrauschten Messdaten. Zur Rekonstruktion verwenden wir die
+tatsächlich gemessenen Daten $\mathbf{y}$, die zu den Messzeitpunkten
+$\mathbf{t}$ erhoben wurden und im Datensatz `messungen` enthalten sind.
+
+Die verrauschten Messdaten des Physikers sehen folgendermaßen aus:
+
+```{r}
+plot(messungen$t, messungen$y, xlab = "Messzeitpunkte t", ylab = "Messungen y")
+```
+
+Wir beschreiben die unverrauschten Daten mit dem folgenden Modell:
+
+$\mathbf{Y} = f(\mathbf{t}) + \mathbf{\epsilon}$
+
+wobei wir die Annahmen treffen, dass
+
+-   die wahren, unverrauschten Messwerte $f(\mathbf{t})$ normalverteilt
+    sind mit Varianz ???
+
+-   die Fehler $\mathbf{\epsilon}$ unabhängig, identisch, normalverteilt
+    sind und unabhängig von den Messdaten.
+
+Wir nehmen an, dass unsere Messdaten einer multivariaten
+Normalverteilung folgen, mit Varianz $\Sigma$. $\Sigma_{2,1}$ beschreibt
+die Varianz ??? und $\Sigma_{1,1}$ ???. Sigma, Gamma
+
+Mathematisch lässt sich das Problem folgendermaßen formulieren:
+
+```{=tex}
+\begin{align*}
+
+\mathbf\mu_{2|1} = \Sigma_{2,1}\Sigma_{1,1}^{-1}\mathbf{y}
+
+\end{align*}
+```
+# Aufgabe 2 - relative Konditionierung der Teilprobleme
+
+Sei $(\mu_{2|1}, \Sigma_{2,1}\Sigma_{1,1},\mathbf{y})$ ein Problem mit
+Lösung $\mu_{2|1} = \Sigma_{2,1}\Sigma_{1,1}^{-1}{y}$, wobei
+$\Sigma_{2,1} \in \mathbb{R^{{n\times}n}}$,
+$\Sigma_{1,1} \in \mathbb{R^{n{\times}n}}$ und
+$\mathbf{y} \in \mathbb{R^{n}}$ mit $\Sigma_{1,1}$ invertierbar. Sei
+außerdem $|\cdot|$ eine zulässige Norm.
+
+Dann können wir das Problem in die folgenden drei Teilprobleme zerlegen:
+
+$\mu_{2|1}(\Sigma_{2,1}) = \Sigma_{2,1}\Sigma_{1,1}^{-1}{y}$ (1)
+
+$\mu_{2|1}(\Sigma_{1,1}) = \Sigma_{2,1}\Sigma_{1,1}^{-1}{y}$ (2)
+
+$\mu_{2|1}(\mathbf{y}) = \Sigma_{2,1}\Sigma_{1,1}^{-1}{y}$ (3).
+
+Dann ergeben sich:
+
+-   $\frac{|{\tilde\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y} - {\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|} = \frac{|({\tilde\Sigma_{2,1}} - {\Sigma_{2,1}})\Sigma_{1,1}^{-1}\mathbf{y}|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|} \leq^{*1} \frac{|{\tilde\Sigma_{2,1}} - {\Sigma_{2,1}}||\Sigma_{1,1}^{-1}\mathbf{y}|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|} = \frac{|{\Sigma_{2,1}}||\Sigma_{1,1}^{-1}\mathbf{y}|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|} \frac{|{\tilde\Sigma_{2,1}} - {\Sigma_{2,1}}|}{|{\Sigma_{2,1}}|} = \kappa_1 \frac{|{\tilde\Sigma_{2,1}} - {\Sigma_{2,1}}|}{|{\Sigma_{2,1}}|}$
+    mit $\kappa_1$ als Konditionszahl für (1)
+
+-   $\frac{|{\Sigma_{2,1}}\tilde\Sigma_{1,1}^{-1}\mathbf{y} - \Sigma_{2,1}\Sigma_{1,1}^{-1}\mathbf{y}|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|} \leq \frac{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}(\tilde{\mathbf{y}} - \mathbf{y})|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|} \leq^{*1} \frac{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}||\tilde{\mathbf{y}} - \mathbf{y}|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|} = \frac{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}||\mathbf{y}|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|} \frac{|{\tilde{y}} - {y}|}{|{y}|} = \kappa_3 \frac{|{\tilde{y}} - {y}|}{|{y}|}$
+    mit $/kappa_3$ als Konditionszahl für (3)
+
+-   $\frac{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y} - {\Sigma_{2,1}}\Sigma_{1,1}^{-1}\tilde{\mathbf{y}}|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|} \leq^{*1} \frac{|{\Sigma_{2,1}}||\tilde\Sigma_{1,1}^{-1}-\Sigma_{1,1}^{-1}||\mathbf{y}|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|} \leq^{*2} \frac{|\Sigma_{1,1}^{-1}|^{2}|{\Sigma_{2,1}}||\mathbf{y}||\Sigma_{1,1}|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|} \frac{|\tilde\Sigma_{1,1}^{-1} - \Sigma_{1,1}^{-1}|}{|\Sigma_{1,1}|} \leq |\Sigma_{1,1}||\Sigma_{1,1}^{-1}| \frac{|\Sigma_{1,1}^{-1}||{\Sigma_{2,1}}||\mathbf{y}|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|} \frac{\tilde\Sigma_{1,1}^{-1} - \Sigma_{1,1}^{-1}}{\Sigma_{1,1}^{-1}} = \kappa_2\frac{\tilde\Sigma_{1,1}^{-1} - \Sigma_{1,1}^{-1}}{\Sigma_{1,1}^{-1}}$
+    mit $\kappa_2$ Konditionierungszahl für (2) als Produkt der
+    Konditionszahl $|\Sigma_{1,1}||\Sigma_{1,1}^{-1}|$ für die
+    Berechnung der Inversen von $\Sigma_{1,1}$ und der Konditionszahl
+    $\frac{|\Sigma_{1,1}^{-1}||{\Sigma_{2,1}}||\mathbf{y}|}{|{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}|}$
+    für die Matrixmultiplikation.
+
+    $*^2$ Submultiplikativität
+
+    $*^2$ folgt aus Aufgabe 2.1c) der Übung inkl. Beweis zur Stetigkeit
+    der Matrixinvertierung in der Lösung
+
+    qed
+
+    Die allgemeine Schranke für den (relativen) Outputfehler bezüglich
+    aller relativen Inputfehler ergibt sich aus der Summe der einzelnen
+    Produkte von Konditionszahl $\kappa_{\{1,2,3\}}$ und jeweiligem
+    Fehler. Also:
+
+# Aufgabe 3 - Einfluss der Hyperparameter (Best - und Worst Case)
+
+Beispielverläufe s. Worddatei
+
+# Stabiler und effizienter Algorithmus
+
+Die Matrix Sigma1.1 ist symmetrisch. Folglich können wir sie orthogonal
+diagonalisieren und damit die Berechnung der Inversen vermeiden, da für
+orthogonale Matrizen gilt: solve(A) = t(A) und die Inverse einer
+Diagonalmatrix sich einfach ergibt, indem man die Kehrbrüche auf der
+Diagonalen berechnet.
+
+```{r}
+# alg2
+# Berechnet mü2.1 (Rekonstruktionswerte) mithilfe orthogonaler Diagonalisierung
+# Input: 
+## t.Strich: Vektor mit beliebigen Messzeitpunkten zwischen min(messungen$t) und max(messungen$t)
+## Sigma und Gamma sind beliebig wählbar mit default 1
+# Output:
+## Vektor mü2.1 der Länge von t.Strich
+
+alg2 <- function(t.Strich, sigma = 1, gamma = 1){
+  Kernfun <- function(s) {
+    exp(-(s ^ 2) / gamma)
+  }
+  matK <-
+    function(t, s) {
+      Kernfun(abs(
+        matrix(t, nrow = length(t), ncol = length(s)) - matrix(
+          s,
+          nrow = length(t),
+          ncol = length(s),
+          byrow = TRUE
+        )
+      ))
+    }
+  Sigma1.1 <-
+    matK(messungen$t, messungen$t) + sigma.quadrat * diag(length(messungen$t))
+  Sigma2.1 <- t(matK(messungen$t, t.Strich))
+  P <- GramSchmidt(eigen(Sigma1.1)$vectors)  #Orthogonalisierung und Normalisierung mithilfe Gram Schmidt Algorithmus aus matlib package
+  D.inv <- diag(1/eigen(Sigma1.1)$values)  
+  y <- Sigma2.1 %*% t(P) %*% D.inv %*% P %*% messungen$y
+  y
+}
+```
+
+```{r}
+#alg3
+#berechnet mü2.1 mittels Cholesky Zerlegung, die doppelt so effizient ist wie LU
+# Input: 
+## t.Strich: Vektor mit beliebigen Messzeitpunkten zwischen min(messungen$t) und max(messungen$t)
+## Sigma und Gamma sind beliebig wählbar mit default 1
+# Output:
+## Vektor mü2.1 der Länge von t.Strich
+
+alg3 <- function(t.Strich, sigma = 1, gamma = 1){
+  Kernfun <- function(s) {
+    exp(-(s ^ 2) / gamma)
+  }
+  matK <-
+    function(t, s) {
+      Kernfun(abs(
+        matrix(t, nrow = length(t), ncol = length(s)) - matrix(
+          s,
+          nrow = length(t),
+          ncol = length(s),
+          byrow = TRUE
+        )
+      ))
+    }
+  Sigma1.1 <-
+    matK(messungen$t, messungen$t) + sigma.quadrat * diag(length(messungen$t))
+  Sigma2.1 <- t(matK(messungen$t, t.Strich))
+  L <- t(chol(Sigma1.1))
+  B <- forwardsolve(L, messungen$y)
+  Sigma2.1 %*% backsolve(t(L), B)
+}
+```
+
+Begründung für die Verwendung von... - diag - chol: doppelt so effizient
+wie LU; kann verwendet werden wegen:
+
+```{r}
+# Sigma1.1 ist quadratisch, symmetrisch und positiv definit.
+  dim(Sigma1.1)  #n x n
+  all(Sigma1.1 == t(Sigma1.1))  #TRUE
+  all(svd(Sigma1.1)$D > 0)  #TRUE
+```
+
+-   forwardsolve
+-   backsolve
+
+# Aufgabe 5 - Laufzeit-Komplexität
+
+Wie verändert sich die Laufzeitkomplexität für die Längen 1, 10, 100,
+1000 von t.Strich?
+
+```{r}
+t.Strich.1 <- seq(from = 0, to = 5, l = 1)
+
+t.Strich.10 <- seq(from = 0, to = 5, l = 10)
+
+t.Strich.100 <- seq(from = 0, to = 5, l = 100)
+
+t.Strich.1000 <- seq(from = 0, to = 5, l = 1000)
+```
+
+Insgesamt beträgt die Laufzeit-Komplexität O(mn + n\^3).
+
+Herleitung: - Sigma1.1: O(n\^2) - Sigma2.1: O(mn) - chol-Zerlegung:
+O(n\^3) - Lösen LGS jeweils: O(n\^2) - Multiplikation Sigma2.1 und
+Ergebnisvektor aus der Zerlegung: O(mn)
+
+Im Allgemeinen beträgt die Laufzeitkomplexität einer Cholesky-Zerlegung
+O(n\^3), was bedeutet, dass die Laufzeit quadratisch mit der Größe der
+Matrix steigt. Das liegt daran, dass die Cholesky-Zerlegung auf dem
+Algorithmus der Gauss-Elimination basiert, der selbst eine Laufzeit von
+O(n\^3) hat.
+
+```{r}
+grid <- expand.grid(
+  m = seq.int(10, 100000, length = 4),
+  n = seq.int(10, 100000, length = 4)
+)
+
+times1 <- numeric(nrow(grid))
+times2 <- numeric(nrow(grid))
+
+for (k in 1:nrow(grid)) {
+m <- grid[k, 1]
+n <- grid[k, 2]
+times1[k] <- median(microbenchmark(alg3(m, sigma = 1, gamma = 1), times = 10)$time)
+times2[k] <- median(microbenchmark(alg1(m, sigma = 1, gamma = 1), times = 10)$time)
+}
+```
+
+```{r}
+cbind(grid, time = times1) |>
+ggplot(aes(m, time, color = as.factor(n))) +
+geom_line()
+```
+
+```{r}
+cbind(grid, time = times) |>
+ggplot(aes(n, time, color = as.factor(m))) +
+geom_line()
+```
+
+# Aufgabe 6 - Schlechter Algorithmus
+
+```{r}
+# Funktion matK
+# Berechnet die Kernmatrix 
+# Input: 
+  # t: Messzeitpunkte der erhobenen Daten mit default t aus der Tabelle Messungen
+  # s: beliebige Messzeitpunkte
+# Output: Rekonstruktion der unverrauschten Messwerte
+
+Kernfun <- function(s) {
+  exp(-(s ^ 2) / gamma)
+}
+
+matK <-
+  function(t, s) {
+    Kernfun(abs(
+      matrix(t, nrow = length(t), ncol = length(s)) - matrix(
+        s,
+        nrow = length(t),
+        ncol = length(s),
+        byrow = TRUE
+      )
+    ))
+  }
+
+  
+alg1 <- function(t.Strich,
+                 gamma = 1,
+                 sigma.quadrat = 1) {
+  Kernfun <- function(s) {
+    exp(-(s ^ 2) / gamma)
+  }
+  matK <-
+    function(t, s) {
+      Kernfun(abs(
+        matrix(t, nrow = length(t), ncol = length(s)) - matrix(
+          s,
+          nrow = length(t),
+          ncol = length(s),
+          byrow = TRUE
+        )
+      ))
+    }
+  Sigma1.1 <-
+    matK(messungen$t, messungen$t) + sigma.quadrat * diag(length(messungen$t))
+  Sigma2.1 <- t(matK(messungen$t, t.Strich))
+  y <- Sigma2.1 %*% solve(Sigma1.1) %*% messungen$y
+  y
+}
+```
+
+Dieser Algorithmus ist schlecht, weil er die Inverse einer Matrix
+verwendet. Ein Algorithmus, der eine Inverse verwendet, ist im
+Allgemeinen instabiler als ein Algorithmus ohne Inverse, da die Inverse
+nicht immer eindeutig ist. Auch wenn es nur eine Inverse gibt, kann der
+Algorithmus immernoch anfälliger sein, weil die Berechnung einer
+Inversen i.d.R. numerisch anspruchsvoller ist als die Berechnung anderer
+Funktionen. Die Verwendung einer Inversen kann daher dazu führen, dass
+kleine numerische Fehler, die während der Berechnungen auftreten, sich
+verstärken und zu größeren Fehlern in den endgültigen Ergebnissen
+führen. Dies kann insbesondere dann ein Problem sein, wenn der
+Algorithmus mit großen Datenmengen arbeitet oder wenn er mit sehr
+kleinen Zahlen oder sehr großen Zahlen arbeitet, die schnell an
+Genauigkeit verlieren können. Insgesamt ist es daher im Allgemeinen
+ratsam, Algorithmen zu vermeiden, die eine Inverse verwenden, wenn es
+möglich ist. Im Folgenden werden wir uns deshalb Zerlegungen von
+Sigma1.1 zunutze machen, um y ohne Inverse zu berechnen.
+
+Außerdem zu erwähnen: alg1 verwendet eine hohe Anzahl an Operationen,
+ist also aufwändiger und hat eine entsprechend längere Laufzeit.
+Zusätzlich werden mehrere Matrizen zwischengespeichert. Dadurch benötigt
+alg1 mehr Speicherplatz, was die Laufzeit weiter erhöht.
+
+# Aufgabe 7 - Visualisierung
+
+```{r}
+x <- t.Strich
+curve(alg3(x, sigma = 1, gamma = 0.0001), from = 0, to = 5, col = "red", ylim = c(0, max(messungen$y, alg3(t.Strich))), ylab = "y", xlab = "t.Strich")
+lines(t.Strich, alg3(x, sigma = 1, gamma = 1), col = "green")
+lines(t.Strich, alg1(x, sigma = 1, gamma = 0.0001), col = "blue")
+points(messungen$t, messungen$y)
+```
+
+# Aufgabe 8 - Einfluss der Parameter und Numerisches Versagen
+
+```{r}
+# Define the function to compute MSE
+mse <- function(gamma) {
+  # Compute MSE for a given sigma value
+  mean(messungen$y - alg3(messungen$t, sigma = 1, gamma))^2 + var(messungen$y - alg3(messungen$t, sigma = 1, gamma))^2
+}
+
+# Generate a sequence of sigma values
+gammas <- seq(from = 0.0001, to = 100, by = 100)
+
+# Compute the MSE for each sigma value
+mse_values <- mapply(mse, gammas)
+
+# Plot the MSE values using the curve function
+plot(mse_values, xlim=c(-3, 100), ylim=c(-1, 120), col="red", xlab="Gamma", ylab="MSE", type = "l")
+```
