@@ -1,0 +1,811 @@
+---
+title: "Signalrekonstruktion"
+subtitle: "1. Projekt im Fach Fortgeschrittene Mathematsiche Methoden"
+author: "Cosima Froehner (12390470)"
+date: "2022-12-16"
+output:
+  pdf_document: default
+  toc: true
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()
+messungen <- read.csv("messungen.csv")
+library("matlib")
+library("pracma")
+library("microbenchmark")
+library("ggplot2")
+```
+
+# 1 Noisy Data
+
+Ein Physiker hat ein Experiment durchgeführt, in dem er die Auswirkungen
+eines elektromagnetischen Impulses erforscht. Entgegen seiner Erwartung
+bilden seine Messdaten keine schöne, glatte Kurve. Stattdessen sind die
+Messdaten stark verrauscht, da sich das Messgerät als ungenau
+berausgestellt hat. Der vorliegende Report beschäftigt sich nun mit dem
+Korrigieren des Messfehlers und der Rekonstruktion einer glatten Kurve
+als Näherung für die unverrauschten Messdaten. Dazu soll im Folgenden
+zunächst das mathematische Modell zur Rekonstruktion vorgestellt und das
+Problem formuliert werden, sowie die Kondition des Problems analysiert
+werden. Anschließend wird zur Lösung des Problems ein Algorithmus
+geschrieben und implementiert. Im Folgenden wird die
+Laufzeit-Komplexität des Algorithmus hergeleitet und mit einem weniger
+stabilen Algorithmus für das Problem verglichen . Abschließend werden
+die Ergebnisse kurz zusammengefasst.
+
+# 2 Mathematisches Modell zur Rekonstruktion
+
+Die verrauschten Daten des Physikers sehen folgendermaßen aus:
+
+```{r}
+plot(messungen$t, messungen$y, xlab = "Messzeitpunkte t", ylab = "Messungen y", main = "Verrauschte Daten")
+```
+
+Wir beschreiben diese Daten $(Y_i, t_i)^n_{i=1}$ mit dem folgenden
+mathematischen Modell:
+
+$\mathbf{Y_i} = f(\mathbf{t_i}) + \mathbf{\epsilon_i}$
+
+f ist die zu rekonstruierende, glatte Funktion mit unverrauschten
+Messwerten und $\epsilon_1, … \epsilon_n$ sind die Messfehler, die durch
+das ungenaue Messgerät entstanden sind. Die Messzeitpunkte
+$\mathbf{t} = t_1, ..., t_n$ sind die tatsächlichen Messzeitpunkte des
+Physikers. Im Folgenden wollen wir uns bei der Rekonstruktion auf das
+Zeitintervall von [0,5], in dem beobachteten Messungen liegen,
+beschränken. Für die Rekonstruktion betrachten wir die Messzeitpunkte
+$\mathbf{t}$ und beliebige Zeitpunkte $t_j`$ mit $j \in \{1,…,m\}$ im
+Intervall [0,5] als Zufallsvariablen. Die Kovarianz jedes Paars von
+Zufallsvariablen $t_i$ und $t`_j$ wird durch die Kernfunktion modelliert
+und als Eintrag in einer Kernmatrix festgehalten. In unserem Fall
+verwenden wir zur Modellierung die Gaussian Kernfunktion (prior):
+
+$\frac{exp(|t_i-t_j`|^2}{\gamma}$
+
+Die Rekonstruktion von f beschreiben wir mit $\hat{f}$. Um auf Basis der
+tatsächlich beobachteten Daten $\mathbf{y}$ Vorhersagen für
+$f(\mathbf{t´})$ zu treffen, verwenden wir den bedingten Erwartungswert:
+
+$\hat{f}(t`) = \mathbf\mu_{2|1} = \Sigma_{2,1}\Sigma_{1,1}^{-1}\mathbf{y}$
+
+, wobei $\Sigma_{2,1} \in \mathbb{R^{{m\times}n}}$ die Kernmatrix von
+$\mathbf{t}$ und $\mathbf{t´}$ ist.
+$\Sigma_{1,1} \in \mathbb{R^{n{\times}n}}$ ist die Kovarianzmatrix von
+$\mathbf{t}$,$\mathbf{t}$ mit dem Messfehler $\sigma^2$ auf der
+Diagonalen aufsummiert. $\mathbf{y} \in \mathbb{R^{n}}$ ist der Vektor
+mit den tatsächlich beobachteten Daten. Die Parameter $\sigma^2$ und die
+$\gamma$ können wir frei wählen, mit der Einschränkung $\sigma^2 > 0$
+und $\gamma > 0$.
+
+# 3 Kondition des mathematischen Problems
+
+## 3.1 Konditionszahlen der Teilprobleme und allgemeine Schranke
+
+Um besser zu verstehen, wie stark unsere Lösung $\mu_{2|1}$ von der
+Störung der Eingangsdaten abhängt, betrachten wir zunächst die
+Konditionierung der Teilprobleme.
+
+**Theorem**
+
+Sei $(\mu_{2|1}, \Sigma_{2,1}\Sigma_{1,1},\mathbf{y})$ ein Problem mit
+Lösung $\mu_{2|1}=\Sigma_{2,1}\Sigma_{1,1}^{-1}{y}$. Sei
+$\tilde\Sigma_{2,1} \in \mathbb{R^{{m\times}n}}$ eine Näherung von
+$\Sigma_{2,1} \in \mathbb{R^{{m\times}n}}$,
+$\tilde\Sigma_{1,1} \in \mathbb{R^{n{\times}n}}$ invertierbar und eine
+Näherung von $\Sigma_{1,1} \in \mathbb{R^{n{\times}n}}$$ und
+$\tilde{\mathbf{y}} \in \mathbb{R^{n}}$ eine Näherung von
+$\mathbf{y} \in \mathbb{R^{n}}$ . Sei außerdem $\lVert{ \cdot }\rVert$
+eine zulässige Norm und seien $\kappa_1$, $\kappa_2$ und $\kappa_3$ die
+Konditionszahlen von drei Teilproblemen.
+
+Definiere folgende drei Teilprobleme:
+
+$\mu_{2|1}(\tilde\Sigma_{2,1}) = \tilde\Sigma_{2,1}\Sigma_{1,1}^{-1}{y}$
+(1)
+
+$\mu_{2|1}(\tilde\Sigma_{1,1}) = \Sigma_{2,1}\tilde\Sigma_{1,1}^{-1}{y}$
+(2)
+
+$\mu_{2|1}(\mathbf{\tilde y}) = \Sigma_{2,1}\Sigma_{1,1}^{-1}{\tilde y}$
+(3).
+
+Dann gilt:
+
+$\kappa_1 = \frac{\lVert{\Sigma_{2,1}}\rVert\lVert\Sigma_{1,1}^{-1}\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}$
+
+$\kappa_2 = \lVert\Sigma_{1,1}\rVert\lVert\Sigma_{1,1}^{-1}\rVert \frac{\lVert\Sigma_{1,1}^{-1}\rVert\lVert{\Sigma_{2,1}}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} = \kappa(\Sigma_{1,1}^{-1})\frac{\lVert\Sigma_{1,1}^{-1}\rVert\lVert{\Sigma_{2,1}}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}$
+
+$\kappa_3 = \frac{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}$
+
+**Beweis:**
+
+$\frac{\lVert\mu_{2|1}(\tilde\Sigma_{2,1})-\mu_{2|1}(\Sigma_{2,1})\rVert}{\lVert\mu_{2|1}(\Sigma_{2,1})\rVert}=\frac{\lVert{\tilde\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y} - {\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}{\lVert {\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} = \frac{\lVert({\tilde\Sigma_{2,1}} - {\Sigma_{2,1}})\Sigma_{1,1}^{-1}\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} \overset{*^1}\leq \frac{\lVert {\tilde\Sigma_{2,1}} - {\Sigma_{2,1}}||\Sigma_{1,1}^{-1}\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} = \frac{\lVert{\Sigma_{2,1}}\rVert\lVert\Sigma_{1,1}^{-1}\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} \frac{\lVert{\tilde\Sigma_{2,1}} - {\Sigma_{2,1}}\rVert}{\lVert{\Sigma_{2,1}}\rVert} = \kappa_1 \frac{\lVert{\tilde\Sigma_{2,1}} - {\Sigma_{2,1}}\rVert}{\lVert{\Sigma_{2,1}}\rVert}$
+mit
+$\kappa_1 = \frac{\lVert{\Sigma_{2,1}}\rVert\lVert\Sigma_{1,1}^{-1}\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}$
+für Teilproblem (1)
+
+$\frac{\lVert\mu_{2|1}(\tilde\Sigma_{1,1})-\mu_{2|1}(\Sigma_{1,1})\rVert}{\lVert\mu_{2|1}(\Sigma_{1,1})\rVert} = \frac{\lVert{\Sigma_{2,1}}\tilde\Sigma_{1,1}^{-1}\mathbf{y} - {\Sigma_{2,1}}\Sigma_{1,1}^{-1}{\mathbf{y}}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} \overset{*^1}\leq \frac{\lVert{\Sigma_{2,1}}\lVert\rVert\tilde\Sigma_{1,1}^{-1}-\Sigma_{1,1}^{-1}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} =\frac{\lVert\Sigma_{2,1}\rVert\lVert\tilde\Sigma_{1,1}^{-1}(\Sigma_{1,1}-\tilde\Sigma_{1,1})\Sigma_{1,1}^{-1}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}\overset{*^1}\leq\frac{\lVert\Sigma_{2,1}\rVert\lVert\tilde\Sigma_{1,1}^{-1}\rVert\lVert\Sigma_{1,1}-\tilde\Sigma_{1,1}\rVert \lVert\Sigma_{1,1}^{-1}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}\overset{*^2}=\frac{\lVert\Sigma_{2,1}\rVert\lVert\Sigma_{1,1}^{-1}\rVert^2\lVert\Sigma_{1,1}-\tilde\Sigma_{1,1}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}=\frac{\lVert\Sigma_{1,1}^{-1}\rVert^{2}\lVert{\Sigma_{2,1}}\rVert\lVert\mathbf{y}\rVert\lVert\Sigma_{1,1}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} \frac{\lVert\tilde\Sigma_{1,1} - \Sigma_{1,1}\rVert}{\lVert\Sigma_{1,1}\rVert} \leq \lVert\Sigma_{1,1}\rVert\lVert\Sigma_{1,1}^{-1}\rVert \frac{\lVert\Sigma_{1,1}^{-1}\rVert\lVert{\Sigma_{2,1}}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}\frac{\lVert\tilde\Sigma_{1,1} - \Sigma_{1,1}\rVert}{\lVert\Sigma_{1,1}\rVert} = \kappa(\Sigma_{1,1})\frac{\lVert\Sigma_{1,1}^{-1}\rVert\lVert{\Sigma_{2,1}}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}\frac{\lVert\tilde\Sigma_{1,1} - \Sigma_{1,1}\rVert}{\lVert\Sigma_{1,1}\rVert}$mit
+$\kappa_2 = \lVert\Sigma_{1,1}\rVert\lVert\Sigma_{1,1}^{-1}\rVert \frac{\lVert\Sigma_{1,1}^{-1}\rVert\lVert{\Sigma_{2,1}}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}$
+=
+$\kappa(\Sigma_{1,1})\frac{\lVert\Sigma_{1,1}^{-1}\rVert\lVert{\Sigma_{2,1}}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}$
+für Teilproblem (2), wobei
+$\lVert\Sigma_{1,1}\rVert\lVert\Sigma_{1,1}^{-1}\rVert$ die
+Konditionszahl für die Berechnung der Inversen von $\Sigma_{1,1}$ ist
+
+$\frac{\lVert\mu_{2|1}(\tilde{y})-\mu_{2|1}(y)\rVert}{\lVert\mu_{2|1}(y)\rVert}=\frac{\lVert{\Sigma_{2,1}}\tilde\Sigma_{1,1}^{-1}\mathbf{y} - \Sigma_{2,1}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} \leq \frac{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}(\tilde{\mathbf{y}} - \mathbf{y})\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} \overset{*^1}\leq \frac{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\rVert \lVert\tilde{\mathbf{y}} - \mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} = \frac{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} \frac{\lVert{\tilde{y}} - {y}\rVert}{\lVert{y}\rVert} = \kappa_3 \frac{\lVert{\tilde{y}} - {y}\rVert}{\lVert {y}\rVert}$
+mit
+$\kappa_3 = \frac{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}$
+als Konditionszahl für Teilproblem (3)
+
+$*^1$ Submultiplikativität
+
+$*^2$ $\tilde\Sigma_{1,1}^{-1} \rightarrow \Sigma_{1,1}^{-1}$ (folgt aus
+Stetigkeit der Matrixinvertierung; Beweis siehe Lösung zu Übung 2.1
+
+$\blacksquare$
+
+Die allgemeine Schranke für den (relativen) Outputfehler bezüglich aller
+relativen Inputfehler ergibt sich aus der Summe der einzelnen Produkte
+von Konditionszahl $\kappa_{\{1,2,3\}}$ und jeweiligem Fehler:
+
+$\mu_{2|1}(\tilde\Sigma_{2,1}\tilde\Sigma_{1,1}^{-1}\tilde{y})=\kappa_1 \frac{\lVert{\tilde\Sigma_{2,1}} - {\Sigma_{2,1}}\rVert}{\lVert{\Sigma_{2,1}}\rVert} + \kappa_2\frac{\lVert\tilde\Sigma_{1,1} - \Sigma_{1,1}\rVert}{\lVert\Sigma_{1,1}\rVert} + \kappa_3 \frac{\lVert{\tilde{y}} - {y}\rVert}{\lVert {y}\rVert} = \frac{\lVert{\Sigma_{2,1}}\rVert\lVert\Sigma_{1,1}^{-1}\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} \frac{\lVert{\tilde\Sigma_{2,1}} - {\Sigma_{2,1}}\rVert}{\lVert{\Sigma_{2,1}}\rVert}  + \kappa(\Sigma_{1,1})\frac{\lVert\Sigma_{1,1}^{-1}\rVert\lVert{\Sigma_{2,1}}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert}\frac{\lVert\tilde\Sigma_{1,1} - \Sigma_{1,1}\rVert}{\lVert\Sigma_{1,1}\rVert}+\frac{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\rVert\lVert\mathbf{y}\rVert}{\lVert{\Sigma_{2,1}}\Sigma_{1,1}^{-1}\mathbf{y}\rVert} \frac{\lVert{\tilde{y}} - {y}\rVert}{\lVert{y}\rVert}$
+
+## 3.2 Einfluss der Hyperparameter auf die Konditionierung
+
+Da die Konditionszahl des Gesamtproblems von der Kondition der
+Kernmatrizen für $\Sigma_{1,1}$ und $\Sigma_{2,1}$ abhängt und diese
+wiederum von der Kernfunktion $\exp(\frac{-s^2}{\gamma})$ abhängig sind,
+betrachten wir zunächst den Einfluss von $\gamma$ auf die Konditionszahl
+der Kernfunktion. Diese ergibt sich aus der Ableitung der Kernfunktion
+nach $\gamma$:
+
+$\kappa_{abs} = \lVert\frac{\delta exp(\frac{-s^2}{\gamma})}{\delta\gamma}\rVert = \lVert exp(\frac{-s^2}{\gamma})\frac{s^2}{\gamma^2}\rVert = exp(\frac{-s^2}{\gamma})\frac{s^2}{\gamma^2}$
+
+$\rightarrow \kappa_{rel} = \frac{\lVert\gamma\rVert}{\lVert exp(\frac{-s^2}{\gamma})\rVert}exp(\frac{-s^2}{\gamma})\frac{s^2}{\gamma^2} = \frac{\gamma s^2}{\gamma^2} = \frac{s^2}{\gamma}$
+
+Folglich ist für Werte von $\gamma \approx 0$ die Konditionszahl der
+Kernfunktion groß und das Problem damit schlecht konditioniert. Für
+$\gamma \geq s^2$ ist die Konditionszahl $\leq 1$ und das Problem
+folglich gut konditioniert.
+
+Da der Hyperparameter $\sigma$ nur zur Berechnung von $\Sigma_{1,1}$
+verwendet wird, betrachten wir uns die Konditionszahl dieser Matrix,
+wobei $\sigma_{max}$ maximaler Singulärwert und $\sigma_{min}$ minimaler
+Singulärwert ist:
+
+$\kappa_{\Sigma_{1,1}} = \frac{\sigma_{max}}{\sigma_{min}} = \frac{\Sigma_{1,1}}{\sigma_{min}} =^{*} \frac{K_{t,t} + \sigma^2I}{\sigma^2} > 1$
+
+Folglich ist das Problem für $\sigma^2 \approx 0$ schlecht und für
+$K_{t,t} \approx 0$ gut konditioniert.
+
+$^* \sigma_{min} = \sigma^2$ folgt aus Beobachtung.
+
+# 4 Algorithmus zur Lösung des Problems
+
+Um den Algorithmus zu schreiben, der $\mu_{2|1}$ berechnet und unser
+Problem löst, erstellen wir zunächst die Kernfunktion sowie die Funktion
+für unsere Kernmatrix.
+
+```{r}
+# Kernfun: 
+# Kernfun ist die Kernfunktion, die als Prior dient und die Kovarianz für jede  Kombination von Messzeitpunkten modelliert 
+# Input: 
+# d: absolute Differenz s zwischen zwei Messzeitpunkten
+# gamma: beliebig wählbar, > 0
+# Output: modellierte Kovarianz
+Kernfun <- function(d, gamma) {
+  exp(-(d^2) / gamma)
+}
+
+# matK: 
+# matK ist die Kernmatrix
+# Input: 
+## t: Vektor der Länge n, der Messzeitpunkte enthält
+## s: Vektor mit Länge m, der Messzeitpunkte enthält
+## gamma: beliebig wählbar, Input für die Kernelfunktion
+# Output: eine Matrix n x m mit den modellierten Kovarianzen aus der Kernelfunktion als Einträge
+matK <-
+  function(t, s, gamma) {
+    Kernfun(abs(
+      matrix(t, nrow = length(t), ncol = length(s)) - matrix(
+        s,
+        nrow = length(t),
+        ncol = length(s),
+        byrow = TRUE
+      )
+    ), gamma)
+  }
+```
+
+## 4.1 Unter Verwendung der Inversen
+
+```{r}
+# alg_Inv
+# berechnet mü2.1 mittels solve()
+# Input: 
+## t.Strich: Vektor der Länge m mit gesampleten Zeitpunkten
+## t.data: Vektor der Länge n mit gesampleten Zeitpunkten aus dem Intervall, in dem beobachtete Daten vorliegen
+## y.data: Vektor der Länge n mit tatsächlich beobachteten Daten
+## sigma.quadrat > 0 mit default = 1
+## gamma > 0 mit default = 1
+# Output:
+## Vektor mü2.1 der Länge m
+alg_Inv <- function(t.Strich, t.data = messungen$t, y.data = messungen$y,
+                 sigma.quadrat = 1, gamma = 1) {
+  Sigma1.1 <-
+    matK(t.data, t.data, gamma) + sigma.quadrat * diag(length(t.data))
+  Sigma2.1 <- t(matK(t.data, t.Strich, gamma))
+  y <- Sigma2.1 %*% solve(Sigma1.1) %*% y.data
+  y
+}
+```
+
+Ein Algorithmus, der eine Inverse verwendet, ist im Allgemeinen
+instabiler als ein Algorithmus ohne Inverse, da die Inverse nicht immer
+eindeutig ist. Auch wenn es nur eine Inverse gibt, kann der Algorithmus
+immernoch anfälliger sein, weil die Berechnung einer Inversen in der
+Regel numerisch anspruchsvoller ist als die Berechnung anderer
+Funktionen. Deshalb schreiben wir im Folgenden einen alternativen
+Algorithmus, der die Berechnung der Inversen unter Verwendung der
+Cholesky Zerlegung vermeidet.
+
+## 4.2 Unter Verwendung der Cholesky-Zerlegung
+
+Bei $\Sigma_{1,1}$ handelt es sich um eine Kovarianzmatrix. Folglich ist
+$\Sigma_{1,1}$ immer symmetrisch und positiv definit und damit eine
+SPD-Matrix. Das erlaubt es uns die Cholesky-Zerlegung zu verwenden und
+$\Sigma_{1,1}$ zu $\Sigma_{1,1} = LL^t$ zu zerlegen, wobei $L$ eine
+untere Dreiecksmatrix ist. Nun können wir durch Vorwärts- und
+Rückwärtssubstitution das LGS lösen. Für dieses Vorgehen verwenden wir
+in R die drei Subroutinen chol, forwardsolve und backsolve, mithilfe
+derer wir das Invertieren der Matrix $\Sigma_{1,1}$ vermeiden und so
+Rechen- und Speicheraufwand einsparen, sowie einen stabileren
+Algorithmus erhalten.
+
+```{r}
+# alg_CH
+# berechnet mü2.1 mittels Cholesky Zerlegung
+# Input: 
+## t.Strich: Vektor der Länge m mit gesampleten Zeitpunkten
+## t.data: Vektor der Länge n mit gesampleten Zeitpunkten aus dem Intervall, in dem beobachtete Daten vorliegen
+## y.data: Vektor der Länge n mit tatsächlich beobachteten Daten
+## sigma.quadrat > 0 mit default = 1
+## gamma > 0 mit default = 1
+# Output:
+## Vektor mü2.1 der Länge m
+
+alg_CH <- function(t.Strich, t.data = messungen$t, y.data = messungen$y, sigma.quadrat = 1, gamma = 1){
+  Sigma1.1 <-
+    matK(t.data, t.data, gamma) + sigma.quadrat * diag(length(t.data))
+  Sigma2.1 <- t(matK(t.data, t.Strich, gamma))
+  L <- chol(Sigma1.1)
+  B <- forwardsolve(t(L), y.data)
+  Sigma2.1 %*% backsolve(L, B)
+}
+```
+
+## 4.3 Laufzeit-Komplexität des Algorithmus unter Verwendung der Cholesky-Zerlegung
+
+Die Laufzeit-Komplexität des Algorithmus aus 4.2 ergibt sich aus den
+folgenden Teil-Laufzeit-Komplexitäten, wobei m und n durch die Größe der
+Input-Daten bestimmt werden:
+
+-   Erstellen der mxn Matrix $\Sigma_{2,1}$: $\mathcal{O}(mn)$
+
+-   Erstellen der nxn Matrix $\Sigma_{1,1}$: $\mathcal{O}(n^2)$
+
+-   Cholesky-Zerlegung von $\Sigma_{1,1}$: $\mathcal{O}(n^3)$ ([Parker,
+    M., Digital Signal Processing 101 (Second
+    Edition)](https://www.sciencedirect.com/topics/engineering/cholesky-decomposition))
+
+-   Vorwärts- und Rückwärtssubstitution: $\mathcal{O}(n^2)$ (gemäß
+    Vorlesung)
+
+-   Multiplikation einer mxn Matrix mit einem n-dimensionalen Vektor:
+    $\mathcal{O}(mn)$
+
+Die Laufzeit-Komplexität beträgt also insgesamt
+$\mathcal{O}(mn) + \mathcal{O}(n^2) + \mathcal{O}(n^3) + \mathcal{0}(n^2) + \mathcal{O}(mn) = \mathcal{O}(n^3 + mn)$.
+Daraus folgt, dass sich die Laufzeit ungefähr auf das $2^3$-fache
+erhöht, wenn sich n verdoppelt. Wenn sich m verdoppelt, verdoppelt das
+die Laufzeit. In anderen Worten: die Laufzeit wächst polynomiell vom
+Grad 3 mit n und linear mit m. Dieser Zusammenhang wird in Abbildung XX
+visualisiert.
+
+```{r, include=FALSE}
+grid <- expand.grid(
+  m = seq.int(30, 60, 90),
+  n = seq.int(1, 1001, length = 1000)
+)
+
+times_CH <- numeric(nrow(grid))
+times_Inv <- numeric(nrow(grid))
+
+for (k in 1:nrow(grid)) {
+m <- grid[k, 1]
+n <- grid[k, 2]
+t.Strich.neu <- seq(from = 0, to = 5, length = m)
+t.neu <- seq(from = 0, to = 5, length = n)
+times_CH[k] <- median(microbenchmark(alg_CH(t.Strich.neu, t = t.neu, sigma.quadrat = 1, gamma = 1), times = 10)$time)
+times_Inv[k] <- median(microbenchmark(alg_Inv(t.Strich.neu, t = t.neu, sigma.quadrat = 1, gamma = 1), times = 10)$time)
+}
+```
+
+```{r}
+cbind(grid, time = times_CH) |>
+ggplot(aes(m, time, color = as.factor(n))) +
+geom_line()
+```
+
+```{r}
+cbind(grid, time = times_CH) |>
+ggplot(aes(n, time, color = as.factor(m))) +
+geom_line()
+```
+
+```{r}
+# grid <- expand.grid(
+#   n = c(25, 50, 100),
+#   m = seq(from = 1, to = 10001, by = 1000)
+# )
+# grid$time <- numeric(nrow(grid))
+# X <- lapply(grid$m, function(x)  seq(from = 0, to = 5, length.out = x))
+# for (k in 1:nrow(grid)) {
+#   n <- grid[k, 1]
+#   sample_data <- slice_sample(simulated_data, n = n)
+#   grid$time[k] <- median(microbenchmark(alg_CH(data_t = sample_data$t, t = X[[k]], data_y = sample_data$y), unit = "microseconds", times = 30)$time)/1000
+# }
+# 
+# ggplot(grid, aes(m, time, color = as.factor(n))) +
+# geom_line()
+```
+
+# 5 Implementierung des Algorithmus
+
+Im Folgenden wird der Algorithmus auf die Daten des Phsyikers
+angewendet. Zur Rekonstruktion verwenden wir den stabileren und
+effizienteren Algorithmus aus 4.2, der sich der Cholesky-Zerlegung
+bedient.
+
+## 5.1 Rekonstruktion der unverrauschten Daten
+
+Für die Rekonstruktion sampeln wir 100 Messzeitpunkte aus dem
+Zeitintervall [0,5], aus dem uns die Messungen des Physikers vorliegen.
+Die verrauschten Messdaten des Physikers sind im Datensatz `messungen`
+mit den Spalten t und y enthalten.
+
+```{r, include = FALSE}
+set.seed(5)
+t.Strich <- sample(seq(from = 0, to = 5, length.out = 1000), 100)
+```
+
+```{r}
+curve(alg_CH(x, sigma.quadrat = 1, gamma = 1), from = 0, to = 5, col = "red", ylim = c(10, max(messungen$y, alg_CH(t.Strich))), ylab = "Messungen und Schätzungen", xlab = "Zeit")
+points(messungen$t, messungen$y)
+```
+
+## 5.2 Einfluss der Hyperparameter $\sigma$ und $\gamma$ auf die Rekonstruktion
+
+In 5.1 wird durch die Visualisierung deutlich, dass wir für die
+Hyperparameter $\sigma = \gamma = 1$ eine schöne, glatte Kurve durch
+unsere beobachteten Daten erreichen. Im Folgenden soll der Einfluss der
+Hyperparameter auf den Verlauf der rekostruierten Funktion $\hat{f}$
+näher analysiert und Parameterwerte ermittelt werden, die den
+Algorithmus versagen lassen. Vor diesem Hintergrund wird auch ein
+Vergleich mit dem Algorithmus aus 4.2, der zur Berechnung die Inverse
+verwendet, vorgenommen.
+
+### 5.2.1 Einfluss auf den Verlauf von $\hat{f}$
+
+Die Kernfunktion $\exp(\frac{-|t_i - t_j|^2}{\gamma})$ modelliert die
+Kovarianz von zwei Messzeitpunkten $t_i$ und $t_j$ mit
+$i \in \{1,…, n\}, j \in \{1,...,m\}$[^1]. Der Hyperparameter $\gamma$
+skaliert in der Kernfunktion die Distanz zwischen $t_i$ und $t_j$ und
+nimmt dadurch Einfluss darauf, wie stark die in einer gewissen Distanz
+von $t_i$ entfernten Werte in die Rekonstruktion einfließen. Wählen wir
+für festes $\sigma = 1$ unser $\gamma < 1$ , so springt die
+rekonstruierte Funktion $\hat{f}$ mit sinkendem $\gamma$ immer häufiger
+auf den Prior von 0 zurück (Abbildung XX). Bei einem sehr kleinen Wert
+von $\gamma = 1e-06$ hebt sich die Funktion kaum noch vom Prior = 0 ab.
+Wählen wir für festes $\sigma = 1$ hingegen Werte $\gamma > 1$, so
+flacht die rekonstruierte Funktion $\hat{f}$ mit wachsendem $\gamma$
+immer stärker ab (Abbildung XX). Bei einem großen Wert von
+$\gamma = 1000$ verläuft $\hat{f}$ nahezu konstant mit
+$\hat{f} \approx \bar{x} = 20.70342$. Durch großes $\gamma$ fließen alle
+Werte aus der Umgebung von $t_i$ unahängig von ihrer Distanz zu $t_i$
+etwa gleich stark in die Rekonstruktion mit ein. In diesem Fall ist der
+Mittelwert unser bester Schätzer.
+
+[^1]: Weiterführende Literatur: [Gaussian processes (3/3) - exploring
+    kernels
+    (peterroelants.github.io)](https://peterroelants.github.io/posts/gaussian-process-kernels/)
+
+```{r}
+curve(alg_CH(x, sigma.quadrat = 1, gamma = 1), from = 0, to = 5, col = "red", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "Messungen und Schätzungen", xlab = "Zeit")
+curve(alg_CH(x, sigma.quadrat = 1, gamma = 0.1), from = 0, to = 5, col = "darkolivegreen4", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)
+curve(alg_CH(x, sigma.quadrat = 1, gamma = 0.01), from = 0, to = 5, col = "darkolivegreen3", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)
+curve(alg_CH(x, sigma.quadrat = 1, gamma = 0.000001), from = 0, to = 5, col = "darkolivegreen2", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)
+points(messungen$t, messungen$y)
+legend(x= "topright", legend = c("1", "0.1", "0.01", "1e-06"), lty = c(1,1,1,1), col = c("red", "darkolivegreen4","darkolivegreen3", "darkolivegreen2"), cex = 0.8, title = "gamma")
+```
+
+```{r}
+curve(alg_CH(x, sigma.quadrat = 1, gamma = 1), from = 0, to = 5, col = "red", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich")
+curve(alg_CH(x, sigma.quadrat = 1, gamma = 10), from = 0, to = 5, col = "darkgoldenrod4", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)
+curve(alg_CH(x, sigma.quadrat = 1, gamma = 100), from = 0, to = 5, col = "darkgoldenrod", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)
+curve(alg_CH(x, sigma.quadrat = 1, gamma = 1000), from = 0, to = 5, col = "darkgoldenrod1", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)
+points(messungen$t, messungen$y)
+legend(x= "bottomright", legend = c("1", "10", "100", "1000"), lty = c(1,1,1,1), col = c("red", "darkgoldenrod4","darkgoldenrod", "darkgoldenrod1"), cex = 0.8, title = "gamma")
+```
+
+$\sigma^2$ ist die Varianz des Messfehlers. Mit sinkendem Messfehler
+steigt die Varianz unserer rekonstruierten Funktion $\hat{f}$, mit
+wachsendem Messfehler flacht die Funktion immer weiter ab und der Offset
+sinkt auf 0 (Abbildung XX).
+
+```{r}
+curve(alg_CH(x, sigma.quadrat = 1, gamma = 1), from = 0, to = 5, col = "red", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "Messungen und Schätzungen", xlab = "Zeit")
+curve(alg_CH(x, sigma.quadrat = 0.1, gamma = 1), from = 0, to = 5, col = "darkolivegreen4", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)
+curve(alg_CH(x, sigma.quadrat = 0.01, gamma = 1), from = 0, to = 5, col = "darkolivegreen3", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)
+curve(alg_CH(x, sigma.quadrat = 0.00000000001, gamma = 1), from = 0, to = 5, col = "darkolivegreen2", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)
+points(messungen$t, messungen$y)
+legend(x= "bottomright", legend = c("1", "0.1", "0.01", "1e-11"), lty = c(1,1,1,1), col = c("red", "darkolivegreen4","darkolivegreen3", "darkolivegreen2"), cex = 0.8, title = "sigma^2")
+```
+
+```{r}
+curve(alg_CH(x, sigma.quadrat = 1, gamma = 1), from = 0, to = 5, col = "red", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "Messungen und Schätzungen", xlab = "Zeit")
+curve(alg_CH(x, sigma.quadrat = 10, gamma = 1), from = 0, to = 5, col = "darkgoldenrod4", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)
+curve(alg_CH(x, sigma.quadrat = 100, gamma = 1), from = 0, to = 5, col = "darkgoldenrod", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)
+curve(alg_CH(x, sigma.quadrat = 1000, gamma = 1), from = 0, to = 5, col = "darkgoldenrod1", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)
+points(messungen$t, messungen$y)
+legend(x= "topright", legend = c("1", "10", "100", "1000"), lty = c(1,1,1,1), col = c("red", "darkgoldenrod4","darkgoldenrod", "darkgoldenrod1"), cex = 0.8, title = "sigma^2")
+```
+
+### 5.2.1 Versagen des Algorithmus durch bestimmte Hyperparameter
+
+Nachdem wir den generellen Einfluss verschiedener Hyperparamter auf den
+Verlauf der Rekonstruktion besser verstanden haben , betrachten wir nun
+Werte für $\sigma$ und $\gamma$, die dazu führen, dass unser Algorithmus
+versagt. Wählt man sehr kleine Werte für $\sigma$, wie beispielsweise
+$\sigma = 1e-08$ beziehungsweise $\sigma^2 = 1e-16$, so ist der
+Algorithmus nicht mehr ausführbar und man erhält folgende Fehlermeldung:
+
+```{r}
+curve(alg_CH(x, sigma.quadrat = 1e-16, gamma = 1), from = 0, to = 5, col = "red", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "Messungen und Schätzungen", xlab = "Zeit")
+points(messungen$t, messungen$y)
+```
+
+## 5.2.1 Vergleich der Algorithmen je nach Hyperparametern
+
+Der Algorithmus aus 4.2, der die Cholesky-Zerlegung verwendet, ist im
+Allgemeinen stabiler als der Algorithmus aus 4.1, der die Inverse
+berechnet. Das wird auch in Abbildung XX deutlich, in der der Verlauf
+des Cholesky-Algorithmus für $\sigma^2 = 1e - 15$ tendenziell glatter
+verläuft als der Algorithmus mit Inverse.
+
+```{r}
+curve(alg_CH(x, sigma.quadrat = 1e-14, gamma = 1), from = 0, to = 5, col = "blue", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "Messungen und Schätzungen", xlab = "Zeit")
+curve(alg_Inv(x, sigma.quadrat = 1e-14, gamma = 1), from = 0, to = 5, col = "green", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "Messungen und Schätzungen", xlab = "Zeit", add = TRUE)
+points(messungen$t, messungen$y)
+```
+
+Wählen wir $\sigma^2 = 1e - 15$ , so liefert uns der Algorithmus mit der
+Cholesky-Zerlegung weiterhin ein Ergebnis, das in Abbildung XX
+dargestellt ist. Der Algorithmus, der die Inverse verwendet, ist für
+$\sigma^2 =1e-15$ dagegen nicht mehr ausführbar, da $\Sigma_{1,1}$ nicht
+mehr invertierbar ist. Es wird folgende Fehlermeldung ausgegeben:
+
+```{r}
+curve(alg_Inv(x, sigma.quadrat = 1e-15, gamma = 1), from = 0, to = 5, col = "blue", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "Messungen und Schätzungen", xlab = "Zeit")
+```
+
+```{r}
+curve(alg_CH(x, sigma.quadrat = 1e-15, gamma = 1), from = 0, to = 5, col = "red", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "Messungen und Schätzungen", xlab = "Zeit")
+points(messungen$t, messungen$y)
+```
+
+# Fazit
+
+Form der Kernmatrix
+
+Besondere Zahlen, bei denen unser Alorithmus scheitert? Inf?
+
+@Eugen Default tStrich schlecht wegen Speicherplatz?
+
+alle plots in base R
+
+Begründung 1,1 bester Fit
+
+x in plot funktion klären
+
+Vergleich Laufzeit von alg_inv
+
+Maschinengenauigkeit?
+
+Gliederung: 1) Problem 2) Alg-Alternativen, Implementierung, Evaluation?
+
+@Eugen Intuition sigma\^2
+
+Abbildungen in den Text einbeziehen
+
+Interpretation Laufzeit Komplexitäten
+
+Laufzeiten Plots
+
+Ist m wirklich wichtig für die Konditionierung?
+
+Kondition, Stabilität, Effizienzbetrachtung
+
+Betragsstriche
+
+sigma.quadrat.quadrat / sigma.quadrat
+
+Im Folgenden werden wir uns deshalb Zerlegungen von sigma.quadrat1.1
+zunutze machen, um y ohne Inverse zu berechnen.
+
+code verstecken
+
+Um den Einfluss der Hyperparameter $\gamma$ und $\sigma.quadrat$ näher
+zu untersuchen, visualisieren wir zunächst deren Einfluss auf die
+Konditionszahl von $\sigma.quadrat_{1,1}$ für festes $\sigma = 1$ bzw.
+festes $\gamma = 1$.
+
+Achsenbeschriftung
+
+```{r}
+# sigma.quadrat <- 1
+# 
+# kappa.fun1 <- function(gamma) {
+#   Kernfun <- function(s) {
+#     exp(-(s ^ 2) / gamma)
+#   }
+#   matK <-
+#     function(t, s) {
+#       Kernfun(abs(
+#         matrix(t, nrow = length(t), ncol = length(s)) - matrix(
+#           s,
+#           nrow = length(t),
+#           ncol = length(s),
+#           byrow = TRUE
+#         )
+#       ))
+#     }
+#   Sigma1.1 <-
+#     matK(messungen$t, messungen$t) + sigma.quadrat * diag(length(messungen$t))
+#   return(max(svd(Sigma1.1)$d) / min(svd(Sigma1.1)$d))
+# }
+# 
+# plot(gamma, sapply(gamma, kappa.fun1), type = "l", xlab = "gamma", ylab = "Konditionszahl")
+# 
+# 
+# 
+# gamma <- seq(0.1, 10, by = .1)
+
+```
+
+`{# {r} # gamma <- 1 #  # kappa.fun2 <- function(sigma.quadrat) { #   Kernfun <- function(s) { #     exp(-(s ^ 2) / gamma) #   } #   matK <- #     function(t, s) { #       Kernfun(abs( #         matrix(t, nrow = length(t), ncol = length(s)) - matrix( #           s, #           nrow = length(t), #           ncol = length(s), #           byrow = TRUE #         ) #       )) #     } #   Sigma1.1 <- #     matK(messungen$t, messungen$t) + sigma.quadrat * diag(length(messungen$t)) #   return(max(svd(Sigma1.1)$d) / min(svd(Sigma1.1)$d)) # } #  # plot(sigma.quadrat, sapply(sigma.quadrat, kappa.fun2), type = "l", xlab = "sigma", ylab = "Konditionszahl") #  #  # sigma.quadrat <- seq(0.1, 10, by = .1)`
+
+Wie verändert sich die Laufzeitkomplexität für die Längen 1, 10, 100,
+1000 von t.Strich?
+
+```{r}
+t.Strich.1 <- seq(from = 0, to = 5, l = 1)
+
+t.Strich.10 <- seq(from = 0, to = 5, l = 10)
+
+t.Strich.100 <- seq(from = 0, to = 5, l = 100)
+
+t.Strich.1000 <- seq(from = 0, to = 5, l = 1000)
+```
+
+Der Algorithmus, der die Cholesky-Zerlegung verwendet, kann in die
+folgenden größeren Operationen aufgeteilt werden:
+
+```{r}
+grid.HP <- expand.grid(
+  sigma.quadrat = seq.int(1, 100, length = 4),
+  gamma = seq.int(1, 100, length = 4)
+)
+
+for (k in 1:nrow(grid.HP)) {
+  sigma.quadrat <- grid.HP[k, 1]
+  gamma <- grid.HP[k, 2]
+  y <- alg_CH(t.Strich, sigma.quadrat, gamma)}
+
+
+
+# Add a column with the function values
+grid.HP$y <- alg_CH(t.Strich, sigma.quadrat = grid.HP$sigma.quadrat, gamma = grid.HP$gamma)
+
+# Plot the function using color to encode the different sigma.quadrat values
+plot(y ~ sigma.quadrat, data = df, col = as.factor(df$sigma.quadrat))
+
+```
+
+## 4.3 Unter Verwendung der Orthogonalen Diagonalisierung
+
+Die Matrix Sigma1.1 ist symmetrisch. Folglich können wir sie orthogonal
+diagonalisieren und damit die Berechnung der Inversen vermeiden, da für
+orthogonale Matrizen gilt: solve(A) = t(A) und die Inverse einer
+Diagonalmatrix sich einfach ergibt, indem man die Kehrbrüche auf der
+Diagonalen berechnet.
+
+```{r}
+# alg_OD
+# Berechnet mü2.1 mithilfe orthogonaler Diagonalisierung
+# Input: 
+## t.Strich: Vektor der Länge m mit Messzeitpunkten
+## sigma.quadrat > 0 mit default = 1
+## gamma > 0 mit default = 1
+# Output:
+## Vektor mü2.1 der Länge m
+
+alg_OD <- function(t.Strich, t = messungen$t, sigma.quadrat = 1, gamma = 1){
+  Sigma1.1 <-
+    matK(t, t, gamma) + sigma.quadrat * diag(length(t))
+  Sigma2.1 <- t(matK(t, t.Strich, gamma))
+  P <- GramSchmidt(eigen(Sigma1.1)$vectors)  #Orthogonalisierung und Normalisierung mithilfe Gram Schmidt Algorithmus aus matlib package
+  D.inv <- diag(1/eigen(Sigma1.1)$values)  
+  y <- Sigma2.1 %*% t(P) %*% D.inv %*% P %*% messungen$y
+  y
+}
+```
+
+-   Pro Zeile der Matrix $\Sigma_{2,1}$: n Multiplikationen und (n-1)
+    Additionen für m Zeilen, demnach:
+    $m(n + (n-1)) = 2mn -m = mn - m = mn$
+
+<!-- -->
+
+-   Pro Eintrag der Matrix werden eine Subtraktion, zwei
+    Multiplikationen und eine Division durchgeführt und das für jeden
+    der mn Einträge
+
+    Demnach: 4mn
+
+    Subtraktion jedes Eintrags des Vektors $\mathbf{t^`}$ mit Länge m
+    von jedem Eintrag des Vektors $\mathbf{s}$ mit Länge n und
+    anschließende Rechenoperationen (Multiplikation, Division) auf jedem
+    der m\*n Einträge, die aber keine höhere Laufzeit-Komplexität als
+    $\mathcal{O}(mn)$ haben.
+
+-   Subtraktion jedes Eintrags des Vektors $\mathbf{t}$ mit Länge n von
+    jedem Eintrag desselben Vektors und anschließende Rechenoperationen
+    (Multiplikation, Division) auf jedem der $n^2$ Einträge, die aber
+    keine höhere Laufzeit-Komplexität als $\mathcal{O}(n^2)$ haben.
+
+```{r}
+grid.HP <- expand.grid(
+  m = seq.int(1, 100, length = 4),
+  n = seq.int(1, 100, length = 4)
+)
+
+plot <- curve(alg_CH(x, sigma.quadrat, gamma), from = 0, to = 5, col = "red", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich")
+
+
+sigma.kat <- numeric(nrow(grid))
+gamma.kat <- numeric(nrow(grid))
+
+for (k in 1:nrow(grid)) {
+sigma.quadrat <- grid[k, 1]
+gamma <- grid[k, 2]
+plot <- curve(alg_CH(x, sigma.quadrat, gamma), from = 0, to = 5, col = "grey", ylim = c(0, max(messungen$y, alg_CH(t.Strich))), ylab = "y", xlab = "t.Strich", add = TRUE)}
+
+cbind(grid, HP = sigma.kat) |>
+ggplot(aes(t.Strich, y, color = as.factor(m))) +
+geom_line()
+```
+
+Nicht zuletzt kann man das Versagen eines Algorithmus auch so
+interpretieren, dass die Laufzeit des Algorithmus inakzeptabel ist.
+Vergleicht man an dieser Stelle den Algorithmus, der die
+Cholesky-Zerlegung verwendet mit dem ALgorithmus aus 4.1, der die
+Inverse verwendet, so fällt schnell auf, dass die Laufzeit für zweiteren
+Algorithmus mit der Größe der Daten stark ansteigt und immer über dem
+Algorithmus mit Cholesky-Zerlegung liegt.
+
+```{r}
+microbenchmark(alg_CH(x, sigma.quadrat = 10^100, gamma = 10^100))
+```
+
+Theorem 1.1
+
+Sei $A \in \mathbb{R^{n{\times}n}}$ invertierbar. Sei außerdem $|\cdot|$
+eine zulässige Norm. Dann gilt für die (relative) Kondition:
+
+\$\\kappa(A) = \\lVert A\\rVert\\lVert A\^{-1}\\rVert \$, wobei die
+Kondition von der gewählten Matrixnorm abhängt.
+
+```{r}
+# Define the function to compute MSE
+mse <- function(gamma) {
+  # Compute MSE for a given sigma.quadrat value
+  mean(messungen$y - alg_CH(messungen$t, sigma.quadrat = 1, gamma))^2 + var(messungen$y - alg_CH(messungen$t, sigma.quadrat = 1, gamma))^2
+}
+
+# Generate a sequence of sigma.quadrat values
+gammas <- seq(from = 0.0001, to = 100, by = 100)
+
+# Compute the MSE for each sigma.quadrat value
+mse_values <- mapply(mse, gammas)
+
+# Plot the MSE values using the curve function
+plot(mse_values, xlim=c(-3, 100), ylim=c(-1, 120), col="red", xlab="Gamma", ylab="MSE", type = "l")
+```
+
+# 
+
+## f Dach ist nichts anderes als eine Vorhersage für beliebige Zeitpunkte im Intervall [0,5]. Diese Vorhersagen, wollen wir auf Basis unserer beobachteten Daten treffen. Das tun wir, indem wir die bedingte Verteilung berechnen mit mü und Sigma.
+
+Die Funktion $\hat{f}$ ist die Summe über mehrere Funktionen
+
+wird definiert durch eine mean-Funktion $\mu_{2|1}$ und eine
+Kovarianzfunktion $k(t, t`)$, wobei (t, t´) alle möglichen Wertepaare im
+Input sind:
+
+$y = \mathcal{N}(\mu_{2|1} | \Sigma_{2|1})$
+
+Die paarweisen Kovarianzen werden in einer Kernmatrix K in der Form ...
+festgehalten.
+
+Sigma 1,1 ist die Kernmatrix für die Messungen von t, t. Sigma 2,1 st
+die Kernmatrix aller Input-Paare t, tStrich.
+
+Wir betrachten jeden der Messzeitpunkte t sowie weitere Zeitpunkte t
+Strich im Intervall [0,5] als einzelne normalverteilte Zufallsvariablen.
+Die Kovarianz jedes Paars von Zufallsvariablen wird durch die
+Kernfunktion modelliert. Wir verwenden als Kernfunktion: exp...
+
+, das wir über den bedingten Erwartungswert berechnen können.
+
+Für die Rekonstruktion treffen wir folgende Annahmen:
+
+-   für beliebige Zeitpunkte $t^´_1, ..., t^´_m$ aus dem
+    Erhebungsintervall [0,5] gilt
+    $f(t^´) \sim \mathcal{}N(0, K_{t^´,t^´})$, wobei $K_{t^´, t^´}$ die
+    Kovarianzmatrix - genauer Kernelmatrix[^2] - ist. Für alle
+    $\mathbf{t} \in \mathbb{R^{n}}$ und $\mathbf{s} \in \mathbb{R^{m}}$
+    werden Abstände mit der Gauß-Kernfunktion modelliert:
+
+    ???
+
+-   die Fehler $\mathbf{\epsilon_{1}}, ... \epsilon_{n}$ sind
+    unabhängig, identisch $\mathcal{N}(0,\,\sigma^{2})$ verteilt und
+    unabhängig von $f(\mathbf{t)}$.
+
+    Die Modellvarianz $\gamma$ und die Fehlervarianz $\sigma^2$ können
+    wir frei wählen, wobei immer gilt $\gamma > 0$ und $\sigma^2 > 0$.
+
+[^2]: Die Kernelmatrix enthält die modellierten Kovarianzen zwischen
+    jedem Paar von Messzeitpunkten. Zur Modellierung dieser Kovarianzen
+    verwenden wir die Gaussche Kernfunktion $\exp(\frac{-s^2}{\gamma})$,
+    die uns im Vergleich zu anderen Kernfunktionen eine möglichst glatte
+    Funktion liefert. [[Gaussian processes (1/3) - From scratch
+    (peterroelants.github.io)](https://peterroelants.github.io/posts/gaussian-process-tutorial/)]
+
+Daraus folgt
+
+\
+$f(t^´| \mathbf{Y}=\mathbf{y}) \sim \mathcal{N(\mu_{2|1}, \Sigma_{2|1})}$
+
+,wobei
+
+$\mathbf\mu_{2|1} = \Sigma_{2,1}\Sigma_{1,1}^{-1}\mathbf{y}$
+
+und
+$\Sigma_{2|1} = \Sigma_{2,2}-\Sigma_{2,1}\Sigma_{1,1}^{-1}\Sigma_{1,2}$.
+
+dass die Messungen $\mathbf{Y}$ aus den tatsächlich erhobenen Daten
+ergänzt um $f(t^´)$ ebenfalls $\sim \mathcal{N(0,\Sigma)}$ , wobei ...
+
+Werte die weiter voneinander entfernt liegen haben eine niedrigere /
+höhere Kovarianz
+
+Bei $\sigma^2 = 1e-16$ sind die Eigenwerte der Matrix
+$\Sigma_{1,1} \approx 0$, sodass die Matrix nicht mehr positiv definit
+ist und damit die Voraussetzung der SPD-Matrix für die
+Cholesky-Zerlegung verletzt wird.
