@@ -1,0 +1,460 @@
+---
+format: 
+  pdf:
+    number-sections: true
+    pdf-engine: pdflatex
+    documentclass: scrartcl
+    include-in-header:
+      - text: |
+          \usepackage{lmodern}
+          \usepackage{dsfont}
+          \usepackage{bm}
+          \usepackage{amsmath, amsthm}
+          \usepackage{enumerate}
+          \newcommand{\eps}{\epsilon}
+          \newcommand{\bt}{\bm t}
+          \newcommand{\bs}{\bm s}
+          \newcommand{\by}{\bm y}
+          \newcommand{\bx}{\bm x}
+          \newcommand{\bY}{\bm Y}
+          \newcommand{\beps}{\bm \epsilon}
+          \newcommand{\bmu}{\bm \mu}
+          \newcommand{\R}{\mathds R}
+          \newcommand{\wh}{\widehat}
+          \newcommand{\wt}{\widetilde}
+          \newcommand{\E}{\mathds E}
+          \raggedbottom
+    mathfont: Latin Modern Math
+highlight-style: github
+title: Musterlösung zu Projekt 1
+author: Fortgeschrittene Mathematische Methoden in der Statistik WS22/23
+lang: de    
+---
+
+```{r}
+#| echo: false
+messungen <- read.csv("messungen.csv")
+```
+
+
+
+## Einführung
+
+In einem phsyikalischen Experiment wurden Daten erhoben, die die Auswirkung eines elektromagnetischen Impulses darstellen. Der Impuls soll einer glatten Kurve folgen, doch die Daten sind aufgrund von Messfehlern verrauscht. Wir wollen das Rauschen entfernen und so die glatte Kurve rekonstruieren.
+
+Dazu verwenden wir *Gauss-Prozess-Regression*. Zusammengefasst ergibt dies das folgende Modell:
+\begin{align*}
+  \begin{pmatrix}
+   \bY \\ f(\bt')
+  \end{pmatrix} \sim \mathcal{N}(\bm 0, \Sigma), 
+  \qquad \Sigma = \begin{pmatrix}
+    \Sigma_{1,1} & \Sigma_{1, 2} \\
+    \Sigma_{2, 1} & \Sigma_{2, 2}
+  \end{pmatrix} = \begin{pmatrix}
+    K_{\bt, \bt} + \sigma^2 I_{n} & K_{\bt, \bt'} \\
+    K_{\bt', \bt}  & K_{\bt', \bt'}
+  \end{pmatrix},
+\end{align*}
+wobei für alle $\bt \in \R^n, \bs \in \R^m$,
+  \begin{align*}
+  K_{\bt, \bs} := \begin{pmatrix}
+      k(t_1 - s_1) & \cdots &  k(t_1 - s_m) \\
+      \vdots & \ddots & \vdots \\
+      k(t_n - s_1) & \cdots &  k(t_n - s_m)
+    \end{pmatrix} \in \R^{n \times m},
+  \end{align*}
+  mit \emph{Kernfunktion} $k(s) = \exp(-s^2 / \gamma)$, $\gamma > 0$. 
+Hier sind $\bY \in \R^n$ die beobachteten Messungen, $\bt \in \R^n$ die Messzeitpunkte und $\bt' \in \R^m$ weitere Zeitpunkte, an denen wir $f$ rekonstruieren möchten.
+Aus den Eigenschaften der multivariaten Normalverteilung folgt dann, dass 
+\begin{align*}
+  \E[f(\bt') \mid \bY = \by] = \bmu_{2 \mid 1} = \Sigma_{2, 1} \Sigma_{1, 1}^{-1}\by, 
+\end{align*}
+welches wir als Rekonstruktion der Funktion $f$ verwenden können.
+
+Die Berechnung von $\bmu_{2 \mid 1}$ ist dann ein numerisches Problem $(g, \Sigma_{2, 1}, \Sigma_{1, 1}, \by)$ mit $g(\Sigma_{2, 1}, \Sigma_{1, 1}, \by)  = \Sigma_{2, 1} \Sigma_{1, 1}^{-1}\by$. 
+
+## Analyse des numerischen Problems
+
+### Konditionierung der Teilprobleme
+
+Wir teilen zunächst das Gesamtproblem $(g, \Sigma_{2, 1}, \Sigma_{1, 1}, \by)$ in die drei Teilprobleme:
+
+**Problem 1.** $(g_1, \Sigma_{2, 1})$ mit $g_1(\Sigma_{2, 1}) = \Sigma_{2, 1}\Sigma_{1, 1}^{-1}\by$ und gegebenem $\Sigma_{1, 1}^{-1} \by$.
+
+**Problem 2.** $(g_2, \Sigma_{1, 1})$ mit $g_2(\Sigma_{1, 1}) = \Sigma_{2, 1}\Sigma_{1, 1}^{-1}\by$ und gegebenen $\Sigma_{2, 1}, \by$.
+
+**Problem 3.** $(g_3, \by)$ mit $g_3(\by) = \Sigma_{2, 1}\Sigma_{1, 1}^{-1}\by$ und gegebene, $\Sigma_{2, 1} \Sigma_{1, 1}^{-1}$.
+
+Wir untersuchen zunächst die Konditionierung der Teilprobleme.
+
+::: {#lem-1}
+Es gilt 
+\begin{align*}
+ \frac{\|g_1(\wt \Sigma_{2, 1}) - g_1(\Sigma_{2, 1}) \|}{\|g_1(\Sigma_{2, 1})\|}
+\le \kappa_1 \frac{\|\wt \Sigma_{2, 1} - \Sigma_{2, 1}\|}{\|\Sigma_{2, 1}\|}, \quad \text{mit } \kappa_1 = \frac{\|\Sigma_{2,1}\| \|\Sigma_{1, 1}^{-1} \by \|}{\|\Sigma_{2,1} \Sigma_{1, 1}^{-1} \by \|}.
+\end{align*}
+:::
+::: {.proof}
+Folgt direkt aus Aufgabe 2.1b mit $A = \Sigma_{2,1}$ und $B =  \Sigma_{1, 1}^{-1} \by$.  \qedhere
+:::
+
+Aufgrund von Submultiplikativität gilt $\kappa_1 \ge 1$. Die Zahl ist groß, wenn der Vektor $\bm \Sigma_{1, 1}^{-1} \by$ nahezu orthogonal zu den Zeilen von $\Sigma_{2, 1}$ ist.
+
+::: {#lem-2}
+Es gilt 
+\begin{align*}
+ \frac{\|g_2(\wt \Sigma_{1, 1}) - g_2(\Sigma_{1, 1})\| }{\|g_2(\Sigma_{1, 1}) \|}
+\le \kappa_2 \frac{\|\wt \Sigma_{1, 1} - \Sigma_{1, 1}\|}{\|\Sigma_{1, 1}\|}, \quad \text{mit } \kappa_2 = \kappa(\Sigma_{1, 1}) \frac{\|\Sigma_{2,1}\| \|\Sigma_{1, 1}^{-1} \| \| \by \|}{\|\Sigma_{2,1} \Sigma_{1, 1}^{-1} \by \|}.
+\end{align*}
+:::
+::: {.proof}
+Es gilt 
+\begin{align*}
+ & \quad \frac{\| g_2(\wt \Sigma_{1, 1}) - g_2(\Sigma_{1, 1})\|}{\|g_2(\Sigma_{1, 1})\|}   \\
+&= 
+ \frac{\|\Sigma_{2, 1}(\wt \Sigma_{1, 1}^{-1} \by -  \Sigma_{1, 1}^{-1} \by)\| }{\|\Sigma_{2, 1} \Sigma_{1, 1}^{-1} \by\|} \\  
+&\le 
+ \frac{\| \Sigma_{2, 1} \|}{\|\Sigma_{2, 1} \Sigma_{1, 1}^{-1} \by \|}  \| \wt \Sigma_{1, 1}^{-1} \by -  \Sigma_{1, 1}^{-1} \by\|  \qquad [\text{Submultiplikativität}]  \\
+ &\le 
+ \frac{\| \Sigma_{2, 1} \| }{\|\Sigma_{2, 1} \Sigma_{1, 1}^{-1} \by \|} \kappa(\Sigma_{1, 1}) \|\Sigma_{1, 1}^{-1}\| \|\by\|  \frac{\| \wt \Sigma_{1, 1}  -  \Sigma_{1, 1}\| }{\| \Sigma_{1, 1} \|}  \qquad [\text{Aufgabe 2.1c mit} A = \Sigma_{1, 1}, B = \by]  \\
+ &= \kappa(\Sigma_{1, 1})  \frac{\| \Sigma_{2, 1} \| \|\Sigma_{1, 1}^{-1}\| \|\by\| }{\|\Sigma_{2, 1} \Sigma_{1, 1}^{-1} \by \|}  \frac{\| \wt \Sigma_{1, 1}  -  \Sigma_{1, 1}\| }{\| \Sigma_{1, 1} \|}.   \qedhere
+\end{align*}
+:::
+
+Aufgrund von Submultiplikativität gilt $\kappa_2 \ge 1$. Die Zahl ist groß, wenn die Matrix $\Sigma_{1, 1}$ schlecht konditiert ist, der Vektor $\by$ nahe am Kern von $\bm \Sigma_{1, 1}^{-1}$ liegt, oder $\bm \Sigma_{1, 1}^{-1} \by$ nahe am Kern von $\Sigma_{2, 1}$ liegt.
+
+::: {#lem-3}
+Es gilt 
+\begin{align*}
+ \frac{\|g_3(\wt \by) - g_3(\by) \|}{\|g_3(\by)\|}
+\le \kappa_3 \frac{\|\wt \by - \by\|}{\|\by \|}, \quad \text{mit } \kappa_3 = \frac{\|\Sigma_{2,1} \Sigma_{1, 1}^{-1} \| \| \by \|}{\|\Sigma_{2,1} \Sigma_{1, 1}^{-1} \by \|}.
+\end{align*}
+:::
+::: {.proof}
+Folgt aus Aufgabe 2.1b mit $A = \by^\top$ und $B = (\Sigma_{2,1} \Sigma_{1, 1}^{-1})^\top$ und der Tatsache, dass $\| \bm x \| = \|\bm x^\top\|$ für alle $\bm x \in \R^n$. \qedhere
+:::
+
+Aufgrund von Submultiplikativität gilt $\kappa_1, \kappa_2, \kappa_3 \ge 1$.
+Die Zahlen sind groß, wenn der Vektor $\Sigma_{1, 1}^{-1} \by$ nahe am Kern von $\Sigma_{2, 1}$ liegt. Denn dann ist $\|\Sigma_{2, 1} \Sigma_{1, 1}^{-1} \by\|$ nahe 0, aber $\|\Sigma_{2, 1}\| \| \Sigma_{1, 1}^{-1} \by\|$ nicht notwendigerweise. Außerdem ist $\kappa_2$ groß, wenn die Matriz $\Sigma_{1, 1}$ schlecht konditioniert ist.
+
+### Schranke für den Gesamtfehler
+
+Wir können nun den Gesamtfehler betrachten.
+
+::: {#thm-1}
+Mit $\kappa_1, \kappa_2, \kappa_3$ wie in den vorangegangen Lemmas gilt
+\begin{align*}
+ &\quad \frac{\|g(\wt \Sigma_{2, 1}, \wt \Sigma_{1, 1}, \wt \by) - g( \Sigma_{2, 1}, \Sigma_{1, 1}, \by) \|}{\|g( \Sigma_{2, 1}, \Sigma_{1, 1}, \by)\|} \\
+&\le \kappa_1 \frac{\|\wt \Sigma_{2, 1} - \Sigma_{2, 1}\|}{\|\Sigma_{2, 1}\|} + \kappa_2 \frac{\|\wt \Sigma_{1, 1} - \Sigma_{1, 1}\|}{\|\Sigma_{1, 1}\|} +    \kappa_3 \frac{\|\wt \by - \by\|}{\|\by \|} \\ 
+&\le \frac{\|\Sigma_{2,1}\| \|\Sigma_{1, 1}^{-1} \| \| \by \|}{\|\Sigma_{2,1} \Sigma_{1, 1}^{-1} \by \|}  \biggl(\frac{\|\wt \Sigma_{2, 1} - \Sigma_{2, 1}\|}{\|\Sigma_{2, 1}\|} + \kappa(\Sigma_{1, 1}) \frac{\|\wt \Sigma_{1, 1} - \Sigma_{1, 1}\|}{\|\Sigma_{1, 1}\|} +   \frac{\|\wt \by - \by\|}{\|\by \|} \biggr).
+\end{align*}
+:::
+::: {.proof}
+Die erste Ungleichung folgt direkt aus dem Theorem von Slide 3 der vierten Vorlesung. 
+Für die zweite verwenden wir, dass wegen Submultiplikativität
+$$\kappa_1 = \frac{\|\Sigma_{2,1}\| \|\Sigma_{1, 1}^{-1} \by \|}{\|\Sigma_{2,1} \Sigma_{1, 1}^{-1} \by \|} \le \frac{\|\Sigma_{2,1}\| \|\Sigma_{1, 1}^{-1} \| \| \by \|}{\|\Sigma_{2,1} \Sigma_{1, 1}^{-1} \by \|}$$
+und 
+$$\kappa_3 = \frac{\|\Sigma_{2,1}\Sigma_{1, 1}^{-1}\| \| \by \|}{\|\Sigma_{2,1} \Sigma_{1, 1}^{-1} \by \|} \le \frac{\|\Sigma_{2,1}\| \|\Sigma_{1, 1}^{-1} \| \| \by \|}{\|\Sigma_{2,1} \Sigma_{1, 1}^{-1} \by \|}. \qedhere $$
+:::
+
+### Einfluss der Hyperparameter
+
+Wir besprechen nun kurz den Einfluss der Hyperparameter $\gamma$ und $\sigma$ auf die Konditionierung. Aus @thm-1 sehen wir, dass das Problem schlecht konditioniert ist, wenn entweder 
+$$\kappa_0 := \frac{\|\Sigma_{2,1}\| \|\Sigma_{1, 1}^{-1} \| \| \by \|}{\|\Sigma_{2,1} \Sigma_{1, 1}^{-1} \by \|} $$
+oder $\kappa(\Sigma_{1, 1})$ groß sind. Wir überlegen zunächst, wie die Hyparameter die Matrizen $\Sigma_{2, 1} = K_{\bt', \bt}$ und $\Sigma_{1, 1} = K_{\bt, \bt} + \sigma^2 I$ beeinflussen.
+Das Problem ist schlecht konditioniert, wenn $\|\Sigma_{1, 1}^{-1} \|$ groß ist, denn dann sind sowohl $\kappa_0$ als auch $\kappa(\Sigma_{1, 1})$ groß.
+
+#### Einfluss von $\sigma$
+
+Der Parameter $\sigma$ beeinflusst nur die Matrix $\Sigma_{1, 1}$. Weil $K_{\bt, \bt}$ eine Kovarianzmatrix ist, muss sie nicht-negativ definit sein. Der kleinste Eigenwert von $\Sigma_{1, 1}$ ist dann von unten durch $\sigma^2$ beschränkt.
+Um das zu sehen, rechnen wir zum Beispiel
+\begin{align*}
+ \bx^\top \Sigma_{1, 1} \bx = \bx^\top K_{\bt, \bt} \bx + \sigma^2 \|\bx\|^2 \ge  \sigma^2 \|\bx\|^2.
+\end{align*}
+Die untere Schranke für die Eigenwerte von $\Sigma_{1, 1}$ folgt dann aus deren variationellen Charakterisierung. Im Fall $\sigma \to \infty$ bekommen wir dann 
+$$\|\Sigma_{1, 1}\|^{-1} \le \sigma^{-2} \to 0 \quad \text{und} \quad \kappa(\Sigma_{1, 1}) = \frac{\lambda_{max}(\Sigma_{1, 1})}{\lambda_{min}(\Sigma_{1, 1})} \to 1.$$
+Das Problem ist also insgesamt gut konditioniert.
+Nehmen wir hingegen $\sigma \to 0$, gilt 
+$$\|\Sigma_{1, 1}\|^{-1} \to \lambda_{min}(K_{\bt, \bt})^{-1} \quad \text{und} \quad \kappa(\Sigma_{1, 1}) \to \kappa(K_{\bt, \bt}).$$
+Das Problem ist dann möglicherweise schlecht konditioniert.
+Dies wird in @fig-sig für $\gamma = 1$ numerisch verifiziert.
+
+```{r}
+#| message: false
+#| echo: false
+#| label: fig-sig
+#| fig-height: 2.5
+#| fig-pos: 't'
+#| fig-cap: "Konditionszahl $\\kappa(\\Sigma_{1, 1})$ und Norm $\\|\\Sigma_{1, 1}^{-1}\\|$ in Abhängigkeit des Hyperparameters $\\sigma^2$ (bei festem $\\gamma = 1$)."
+K <- function(t, ts, gamma = 1) {
+  n <- length(t)
+  m <- length(ts)
+  s <- matrix(t, n, m) -  matrix(ts, n, m, byrow = TRUE)
+  exp(-s^2 / gamma)
+}
+
+matrix_condition <- function(A) {
+  singular_values <- svd(A)$d
+  max(singular_values) / min(singular_values)
+}
+
+t <- messungen$t
+sigma_sq <- 10^seq(-2, 2, length = 100)
+cond <- norm <- numeric(length(sigma_sq))
+
+for (i in seq_along(sigma_sq)) {
+  Sigma_11 <- K(t, t) + sigma_sq[i] * diag(length(t))
+  cond[i] <- matrix_condition(Sigma_11)  # Kondition von Sigma_11
+  norm[i] <- 1 / min(svd(Sigma_11)$d)    # Norm von Sigma_11^{-1} 
+}
+
+library(tidyverse)
+library(latex2exp)
+theme_set(theme_minimal())
+
+tibble(sigma = sigma_sq, `Konditionszahl` = cond, `Norm der Inversen` = norm) |>
+  pivot_longer(-1) |> 
+  ggplot(aes(sigma, value)) +
+  geom_line() +
+  facet_wrap(~name, scales = "free") +
+  scale_y_log10() +
+  labs(x = TeX("\\sigma^2"), y = "Wert", parse = TRUE)
+```
+
+
+#### Einfluss von $\gamma$
+
+Nehmen wir nun an, dass sowohl in $\bt$ als auch $\bt'$ alle Einträge verschieden sind.
+Wir bemerken zunächst, dass:
+
+*  für $s \neq 0$ gilt $\lim_{\gamma \to 0} \exp(-s^2 / \gamma)= 0$  und $\lim_{\gamma \to \infty} \exp(-s^2 / \gamma)= 1$,
+* für $s = 0$ gilt $\exp(-s^2 / \gamma) = 1$.
+
+Im Fall $\gamma \to 0$ ergibt das $\Sigma_{1, 1} = K_{\bt, \bt} + \sigma^2 I_n \to (1 + \sigma^2)I$ und $\Sigma_{2, 1} = K_{\bt', \bt} \to 0_{m \times n}$. Es gilt dann 
+$\|\Sigma_{1, 1}^{-1}\|_2 = 1 / \lambda_{min}(\Sigma_{1, 1}) \to 1 / (1 + \sigma^2)$ und $\kappa(\Sigma_{1, 1}) \to 1$. Außerdem gehen sowohl Zähler als auch Nenner in $\kappa_0$ gegen 0, allerdings ist die Zahl groß, wenn $\|\Sigma_{1, 1}^{-1}\|$ groß ist. 
+
+Im Fall $\gamma \to \infty$ gilt $\Sigma_{1, 1} \to 1_{n \times n } + \sigma^2 I_n$ und $\Sigma_{2, 1} \to 1_{m \times n}$. Dies ist problematisch, wenn $\sigma$ klein ist, da dann $\Sigma_{1, 1}$ nahezu singulär ist. Unsere Beobachtungen werden in @fig-gam für $\sigma = 1$ und @fig-gam-2 für $\sigma = 0.001$ verifiziert.
+
+```{r}
+#| echo: false
+#| label: fig-gam
+#| fig-height: 2.5
+#| fig-pos: 'p'
+#| fig-cap: "Konditionszahl $\\kappa(\\Sigma_{1, 1})$ und Norm $\\|\\Sigma_{1, 1}^{-1}\\|$ in Abhängigkeit des Hyperparameters $\\gamma$ (bei festem $\\sigma = 1$)."
+
+gammas <- 10^(seq(-2, 2, length = 100))
+cond <- norm <- numeric(length(gammas))
+
+for (i in seq_along(gammas)) {
+  Sigma_11 <- K(t, t, gamma = gammas[i]) + diag(length(t))
+  cond[i] <- matrix_condition(Sigma_11)  # Kondition von Sigma_11
+  norm[i] <- 1 / min(svd(Sigma_11)$d)    # Norm von Sigma_11^{-1} 
+}
+tibble(gamma = gammas, `Konditionszahl` = cond, `Norm der Inversen` = norm) |>
+  pivot_longer(-1) |> 
+  ggplot(aes(gamma, value)) +
+  geom_line() +
+  facet_wrap(~name, scales = "free") +
+  scale_y_log10() +
+  labs(x = TeX("\\gamma"), y = "Wert", parse = TRUE) 
+```
+
+
+```{r}
+#| echo: false
+#| label: fig-gam-2
+#| fig-height: 2.5
+#| fig-pos: 'p'
+#| fig-cap: "Konditionszahl $\\kappa(\\Sigma_{1, 1})$ und Norm $\\|\\Sigma_{1, 1}^{-1}\\|$ in Abhängigkeit des Hyperparameters $\\gamma$ (bei festem $\\sigma = 0.001$)."
+
+gammas <- 10^(seq(-2, 2, length = 100))
+cond <- norm <- numeric(length(gammas))
+
+for (i in seq_along(gammas)) {
+  Sigma_11 <- K(t, t, gamma = gammas[i]) + 0.001 * diag(length(t))
+  cond[i] <- matrix_condition(Sigma_11)  # Kondition von Sigma_11
+  norm[i] <- 1 / min(svd(Sigma_11)$d)    # Norm von Sigma_11^{-1} 
+}
+tibble(gamma = gammas, `Konditionszahl` = cond, `Norm der Inversen` = norm) |>
+  pivot_longer(-1) |> 
+  ggplot(aes(gamma, value)) +
+  geom_line() +
+  facet_wrap(~name, scales = "free") +
+  scale_y_log10() +
+  labs(x = TeX("\\gamma"), y = "Wert", parse = TRUE)
+```
+
+Zusammenfassend können wir sagen, dass $\sigma$ klein und $\gamma$ groß den Worst Case und $\sigma$ groß und $\gamma$ klein den Best Case darstellen.
+
+## Algorithmus
+
+### Berechnung durch Cholesky-Faktorisierung
+
+Die Berechnung der Rekonstruktion $\bm mu_{2 \mid 1} = \Sigma_{2, 1} \Sigma_{1,1}^{-1} \by$ besteht im Wesentlichen aus Matrixmultiplikation und -inversen. Natürlich sollten wir es vermeiden, die Matrix $\Sigma_{1,1}$ direkt zu  invertieren.  Stattdessen schreiben wir das Resultat $\bx = \Sigma_{1,1}^{-1} \by$ als Lösung des LGS $\Sigma_{1,1} \bx = \by$ dar und lösen dieses. Da $\Sigma_{1, 1}$ eine Kovarianzmatrix ist, muss sie positiv definit (oder nicht invertierbar) sein. Wir können uns deshalb die Cholesky-Faktorisierung $\Sigma_{1,1} = R^\top R$ zunutze machen ($R$ ist hier eine obere Dreiecksmatrix). Wir Lösen das LGS dann in zwei Schritten: $R^\top \bm z = \by$ durch Vorwärtssubstitution und dann $R \bx = \bm z$ durch Rückwärtssubstition. Dies macht die Berechnung stabil und effizient.
+
+In `R` können wir den Algorithmus wiefolgt schreiben:
+
+```{r}
+reconstruct_f <- function(y, t, t_new, gamma = 1, sigma = 1) {
+  stopifnot(length(y) == length(t))
+  Sig_11 <- K(t, t, gamma) + sigma^2 * diag(length(t))
+  Sig_21 <- K(t_new, t, gamma)
+  R <- chol(Sig_11)
+  z <- forwardsolve(t(R), y)
+  c(mu_12 <- Sig_21 %*% backsolve(R, z))
+}
+```
+Das Ergebnis des Algorithmus mit $\gamma = \sigma = 1$ ist in @fig-fhat-1 zu sehen.
+
+```{r}
+#| echo: false
+#| label: fig-fhat-1
+#| fig-height: 2.5
+#| fig-width: 4
+#| fig-pos: 't'
+#| fig-cap: "Rekonstruktion der Funktion $f$ durch den Algorithmus mit $\\gamma = \\sigma = 1$."
+t_new <- seq(0, 5, l = 2000)
+y <- messungen$y
+t <- messungen$t
+y_new <- reconstruct_f(y, t, t_new)
+
+data.frame(f = y_new, t = t_new) |>
+  ggplot(aes(t, f)) +
+  geom_line() +
+  geom_point(data = messungen, mapping = aes(t, y)) +
+  ylab(TeX("\\hat{f}(t)"))
+```
+
+
+### Laufzeitanalyse
+
+Die Laufzeit setzt sich aus den folgenden Schritten zusammen:
+
+* Erstellen der Matrix $\Sigma_{1, 1} \in \R^{n \times n}$: $O(n^2)$,
+* Erstellen der Matrix $\Sigma_{2, 1} \in \R^{m \times n}$: $O(mn)$,
+* Berechnen des Cholesky-Faktors $R$: $O(n^3)$,
+* Vorwärts- und Rückwärtssubstitution: jeweils $O(n^2)$,
+* Matrixmultiplikation $\Sigma_{2, 1} \bx$ mit $\bx = \Sigma_{1, 1}^{-1} \by \in \R^n$: $O(mn)$.
+
+Der Gesamtaufwand ist also $O(n^3 + mn)$. Er ist kubisch in $n$ und linear in $m$. Das bedeutet, dass der Algorithmus sehr langsam wird, wenn sehr viele Daten beobachtet werden. Die Anzahl $m$ der Auswertungspunkte ist dagegen weit weniger problematisch.
+
+
+### Einfluss der Hyperparameter auf die Rekonstruktion
+
+Wir untersuchen nun, wie die Parameter $\gamma$ und $\sigma$ die Rekonstruktion beeinflussen. Dazu zeigt @fig-fhat-hyper Rekonstruktionen unter verschiedenen Hyperparameterkombinationen. In @fig-fhat-hyper (a) ist $\sigma = 0.1$ fixiert, aber $\gamma$ variert, in @fig-fhat-hyper (b) ist $\gamma = 1$ fixiert, aber $\sigma$ variert. 
+
+Der Parameter $\gamma$ bestimmt die Glattheit der Rekonstruktion. Für $\gamma = 0.01$ werden die gemessenen Daten nahezu interpoliert und die rekonstruierte Kurve ist sehr wackelig. Für $\gamma = 100$ ist die Kurve extrem flach und folgt kaum dem Muster der Daten. Die beiden Werte $\gamma = 1, 10$ scheinen einen guten Mittelweg zu bieten, wo die Kurve glatt ist, aber das beobachtete Muster nachzeichnet. Erklären lässt sich dies durch die Rolle von $\gamma$ in der Kovarianz benachbarter Zeitpunkte. Ist $\gamma$ groß, so ist auch die Korrelation zwischen den Zeitpunkten groß. Deshalb müssen nahe beieinander liegende Punkte einen ähnlichen Funktionswert aufweisen. Ist $\gamma$ klein, sind benachbarte Beobachtungen nahezu unkorreliert, wodurch stärkere lokale Variation entsteht.
+
+Der Parameter $\sigma$ beschreibt, wie viel Messfehler wir erwarten. Ist er klein, zwingen wir die Kurve näher an die Beobachtungen. Ist er groß, kann jede Abweichung vom Mittelwert $\bm 0$ unserer Normalverteilungsannahme als Messfehler plausibilisiert werden. Deshalb bewegt sich die Kurve näher an die Nulllinie.
+
+```{r}
+#| layout-ncol: 2
+#| echo: false
+#| label: fig-fhat-hyper
+#| fig-height: 4
+#| fig-width: 4
+#| fig-pos: 't'
+#| fig-cap: "Einfluss der Hyperparameter $\\gamma$ und $\\sigma$ auf die Rekonstruktion."
+#| fig-subcap:
+#|   - "fixiertes $\\sigma = 0.1$"
+#|   - "fixiertes $\\gamma = 1$"
+
+rec_gamma <- tibble(gamma = c(0.01, 1, 10, 100)) |>
+  group_by(gamma) |>
+  mutate(
+    rec = list(
+      tibble(
+        f = reconstruct_f(y, t, t_new, gamma = gamma, sigma = 0.1),
+        t = t_new,
+      )
+    )
+  )|>
+  unnest(rec)
+
+rec_gamma |>
+  mutate(gamma = as.factor(gamma)) |>
+  ggplot(aes(t, f, color = gamma)) +
+  geom_line() +
+  geom_point(data = messungen, mapping = aes(t, y, color = NULL)) +
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(TeX("$\\gamma$"))) +
+  ylab("y")
+
+rec_sigma <- tibble(sigma = c(0.01, 0.1, 1, 5)) |>
+  group_by(sigma) |>
+  mutate(
+    rec = list(
+      tibble(
+        f = reconstruct_f(y, t, t_new, gamma = 1, sigma = sigma),
+        t = t_new
+      )
+    )
+  )|>
+  unnest(rec)
+
+rec_sigma |>
+  mutate(sigma = as.factor(sigma)) |>
+  ggplot(aes(t, f, color = sigma)) +
+  geom_line() +
+  geom_point(data = messungen, mapping = aes(t, y, color = NULL)) +
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(TeX("$\\sigma$"))) +
+  ylab("y")
+```
+
+
+### Problematische Hyperparameter
+
+Manche Hyperparameterwerte sind für unseren Algorithmus problematisch. Die Cholesky-Faktorisierung funktioniert nur für SPD-Matrizen. Sind manche Eigenwerte der Matrix $\Sigma_{1, 1}$ nahezu Null können sie numerisch negativ werden. Im Falle von $\sigma = 10^{-8}$ und $\gamma = 1$ erhalten wir zum Beispiel die Fehlermeldung:
+```{r}
+try(reconstruct_f(y, t, t_new, gamma = 1, sigma = 1e-8))
+```
+Dies lässt sich nicht ganz vermeiden. Wir haben allerdings schon einen relativ stabilen Algorithmus geschrieben, da durch die Cholesky-Faktorisierung eine Matrixinvertierung umgangen werden konnte. Eine schlechtere Variante unseres Algorithmus wäre zum Beispiel:
+
+```{r}
+reconstruct_bad <- function(y, t, t_new, gamma = 1, sigma = 1) {
+  stopifnot(length(y) == length(t))
+  Sig_11 <- K(t, t, gamma) + sigma^2 * diag(length(t))
+  Sig_21 <- K(t_new, t, gamma)
+  c(mu_12 <- Sig_21 %*% solve(Sig_11) %*% y)
+}
+```
+Dieser Algorithmus versagt schon bei Werten, bei denen unsere gute Variante noch funktioniert, z.B. für $\gamma = 100$, $\sigma = 10^{-7}$:
+
+```{r}
+try(reconstruct_bad(y, t, t_new, gamma = 100, sigma = 1e-7))
+```
+
+```{r}
+head(reconstruct_f(y, t, t_new, gamma = 100, sigma = 1e-7))
+```
+
+
+
+## Zusammenfassung
+
+In diesem Projekt haben wir eine Methode (Gauss-Prozess-Regression) zur Rekonstruktion einer glatten Funktion von verrauschten Daten implementiert und analysiert. Aus dem zugrundeliegenden statistischen Modell ergibt sich eine Berechnungsformel, die eine Matrixinverse enthält. 
+
+Für einen möglichst effizienten und stabilen Algorithmus können wir diese Inverse umgehen, indem wir die Berechnung in ein LGS umformulieren.
+Da es sich bei der zu invertierenden Matrix um die Kovarianzmatrix der gemessenenen Funktionwerte handelt, können wir dies mithilfe der Cholesky-Faktorisierung effizient lösen.   Die Laufzeit dieses Algorithmus skaliert kubisch in der Anzahl $n$ der Messungen, was für besonders große Datensätze ein Problem darstellen würde. In der Anzahl der Auswertestellen $m$ skaliert die Laufzeit linear, weshalb dies ein zu vernachlässigender Faktor ist.
+
+Unsere Methode hat zwei Hyperparmeter $\gamma$ und $\sigma$, welche einen großen Einfluss auf die Rekonstruktion haben. Der Parameter $\gamma$ bestimmt im Wesentlichen die Glattheit der Kruve und $\sigma$, wie weit die Kurve von der Nulllinie abweichen darf. Die Parameter beeinflussen auch die Kondition und numerische Stabilität. Die Kondition des Problems wird zu einem erheblichen Teil durch die und Konditionszahl der zu invertierenden Kovarianzmatrix und die Norm der Inversen beeinflusst. Diese können sehr groß werden, wenn $\sigma$ sehr klein oder $\gamma$ sehr groß ist. Dabei haben wir auch gesehen, dass der Cholesky-Algorithmus zwar in Extremfällen auch versagt, aber weniger schnell als eine Variante basierend auf Matrixinvertierung.
+Die Wahl $\gamma = \sigma = 1$ hat sich als eine praktikable Wahl herausgestellt, bei der die Kurve glatt ist, dem Trend der Messungen folgt und numerisch unbedenklich ist.
+
+
+
+
+## Anmerkungen zur Form
+
+* Ein Report ist ein geschriebener Text, der aus vollständigen Sätzen/Paragraphen besteht und möglichst einem roten Faden folgt. Zur besseren Übersicht sollte er in Abschnitte mit (Unter)-Überschritfen unterteilt sein. 
+
+* Jede Abbildung sollte mit einer Bildunterschrift versehen werden. Diese sollte einen vollständigen Satz formen und in einem Punkt enden. Optimalerweise macht sie den Graphen verständlich, ohne dass der Leser im Haupttext nach Erklärungen suchen muss.
+
+* Als Richtlinie wurde ausgegeben: "Ein Student im nächsten Jahr sollte nur anhand des Reports und den Vorlesungsunterlagen verstehen können, was vor sich geht." Um dies sicher zu stellen, müssen wichtige Dinge, wie die $\Sigma$-Matrizen und das statistische Modell definiert werden. 
+
+* Eine Punkt-für-Punkt Antwort auf die gestellten Aufgaben erfüllt diesen Zweck auch nicht, weil man die Fragen kennen muss, um die Antwort zu verstehen.
+
+* Mathematische Formeln sind normaler Teil der geschriebene Sprache. Wenn ein (Neben-)Satz mit einer Formel endet, sollte die Formel dann mit einem mit Punkt bzw. Komma enden. 
+
+* Im letzten Teil sollten die wichtigsten *Erkenntnisse* zusammengefasst werden, nicht was getan wurde.
+
